@@ -593,3 +593,10 @@ html, body { overscroll-behavior-y: none; }
 html { overflow-x: clip; }
 body { overflow-x: hidden; }
 #viewCal { overflow-x: clip; overflow-clip-margin: 24px; max-width: 100%; }
+/* Users tree: fold / unfold who is under each manager */
+.org-tg { flex: none; width: 40px; height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 1px; border: 0; background: none; border-radius: 9px; color: var(--muted); font: inherit; font-size: 12px; padding: 0; }
+button.org-tg { cursor: pointer; background: var(--bg); }
+button.org-tg:hover { background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }
+.org-tg svg { transition: transform .2s; }
+.org-tg.open svg { transform: rotate(-90deg); }
+.org-tg b { font-weight: 700; }
