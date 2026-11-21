@@ -225,6 +225,7 @@
 
   /* ---------- the org tree, as published by the sync job (id -> {n, r, m}) ---------- */
   var Org = F.Org = { map: {}, loaded: false };
+  Org.virtual = {};
   Org.name = function (id) { var x = Org.map[id]; return x ? x.n : (id || "").replace(/@.*/, ""); };
   Org.seniors = function () { return Object.keys(Org.map).filter(function (k) { return Org.map[k].r === "מרכז בוגר"; }); };
   /* Who may approve someone's equipment: their direct manager and that person's manager; מרכז בוגר for מדריכות שכבה. */
@@ -232,6 +233,8 @@
     var x = Org.map[uid] || { r: me.role, m: "" };
     if (x.r === "מדריכת שכבה") return Org.seniors();
     var out = [], m1 = x.m, m2 = m1 && Org.map[m1] ? Org.map[m1].m : "";
+    /* A direct manager who isn't registered yet: their own manager approves. */
+    if (!m1 && x.mn && Org.virtual[x.mn]) return [Org.virtual[x.mn]];
     if (m1 && Org.map[m1]) out.push(m1);
     if (m2 && Org.map[m2] && out.indexOf(m2) === -1) out.push(m2);
     return out;
@@ -240,6 +243,7 @@
   Org.notifyTo = function (uid) {
     var x = Org.map[uid] || { r: me.role, m: "" };
     if (x.r === "מדריכת שכבה") return Org.seniors();
+    if (!x.m && x.mn && Org.virtual[x.mn]) return [Org.virtual[x.mn]];
     return x.m && Org.map[x.m] ? [x.m] : [];
   };
 
@@ -416,6 +420,7 @@
   F.stopAll = function () { subs.forEach(function (u) { try { u(); } catch (e) {} }); subs = []; [Cal, Book, Gear, Links].forEach(function (m) { m.loaded = false; }); };
   F.startAll = function () {
     F.stopAll();
+    F.listen(db.collection("config").doc("org").onSnapshot(function (s) { Org.virtual = (s.exists && s.data().virtualManagers) || {}; }, function () {}));
     F.listen(db.collection("org").doc("tree").onSnapshot(function (s) { Org.map = (s.exists && s.data().map) || {}; Org.loaded = true; Gear.changed(); }, function () { Org.loaded = true; }));
     F.listen(db.collection("public").doc("units").onSnapshot(function (s) { Units.list = (s.exists && s.data().list) || []; if (F.area === "settings") Settings.render(); }, function () {}));
     Cal.start(); Book.start(); Gear.start(); Links.start();
