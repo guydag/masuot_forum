@@ -1194,7 +1194,7 @@
   Book.mineMissing = function () { var t = today(); return Book.list.filter(function (b) { return Book.isMine(b) && b.date >= t && Book.missingBoger(b); }).length; };
   /* איזור אש: up to 50 children together, or one gadud / team of any size. */
   Book.people = function (bs) { return bs.reduce(function (s, b) { return s + (parseInt(b.fields && b.fields.count, 10) || 0); }, 0); };
-  Book.room = function (p, bs) { if (!p.cap) return p.multi || !bs.length ? Infinity : 0; if (!bs.length) return Infinity; return Math.max(0, p.cap - Book.people(bs)); };
+  Book.room = function (p, bs) { if (!p.cap) return p.multi || !bs.length ? Infinity : 0; if (!bs.length) return Infinity; if (bs.some(function (b) { return !(parseInt(b.fields && b.fields.count, 10) > 0); })) return 0; return Math.max(0, p.cap - Book.people(bs)); };
   Book.sort = "near";
   Book.badge = function () { F.badge("book", Book.mineMissing() ? 1 : 0, true); };
   Book.open = function () { if (!Book.built) Book.build(); Book.render(); };
