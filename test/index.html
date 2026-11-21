@@ -39,14 +39,12 @@
 <meta name="application-name" content="פורום מוביל">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <meta name="theme-color" content="#fffaf3">
-<link rel="stylesheet" href="forum.css?v=10">
+<link rel="stylesheet" href="forum.css?v=20">
 <script>
 /* Set the theme before the page paints so a dark choice never flashes light first. */
 (function () {
-  var t = null;
-  try { t = localStorage.getItem("theme"); } catch (e) {}
-  if (t !== "dark" && t !== "light") t = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  document.documentElement.setAttribute("data-theme", t);
+  /* פורום מוביל has a light look only. */
+  document.documentElement.setAttribute("data-theme", "light");
 })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -744,7 +742,7 @@ button:focus-visible, summary:focus-visible, .eu-roles input:focus-visible + lab
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<script src="forum.js?v=12"></script>
+<script src="forum.js?v=20"></script>
 <script>
 document.documentElement.lang = "he";
 document.documentElement.dir = "rtl";
@@ -1182,13 +1180,14 @@ function renderProfile() {
   var bits = [];
   if (p.role) bits.push(["role", p.role]);
   if (p.idNumber) bits.push(["id", p.idNumber]);
+  if (p.unit) bits.push(["mgr", p.unit]);
   if (p.managerName || p.manager) bits.push(["mgr", "אחראי/ת ישיר/ה: " + (p.managerName || shortId(p.manager))]);
   bits.push(["un", shortId(id)]);
   bits.forEach(function (bt, i) {
     if (i) { var d = document.createElement("i"); d.className = "u-dot"; meta.appendChild(d); }
     var e = document.createElement(bt[0] === "role" || bt[0] === "mgr" ? "span" : "bdi"); e.className = "u-" + bt[0]; e.textContent = bt[1]; meta.appendChild(e);
   });
-  $("pfEdit").onclick = function () { editUser({ id: id, name: p.name || "", fullName: p.fullName || "", idNumber: p.idNumber || "", role: p.role || "", manager: p.manager || "" }, { self: true }); };
+  $("pfEdit").onclick = function () { editUser({ id: id, name: p.name || "", fullName: p.fullName || "", idNumber: p.idNumber || "", role: p.role || "", manager: p.manager || "", unit: p.unit || "" }, { self: true }); };
   card.hidden = false;
 }
 function setGreeting() {
@@ -1919,7 +1918,7 @@ $("installBannerX").addEventListener("click", function () { try { localStorage.s
 function route() {
   var h = location.hash, onSettings = h === "#settings";
   /* פורום מוביל: every area has its own address; a link to a report (#r=…) opens the reports area. */
-  var area = onSettings ? "settings" : /^#r=/.test(h) ? "reg" : ((/^#(cal|book|gear|reg|links)$/.exec(h) || [])[1] || "cal");
+  var area = onSettings ? "settings" : /^#r=/.test(h) ? "reg" : ((/^#(home|cal|book|gear|reg|links|insights)$/.exec(h) || [])[1] || "home");
   var views = window.Forum ? Forum.viewFor : { reg: "viewMain", settings: "viewSettings" };
   if (!window.Forum && area !== "settings") area = "reg";
   Object.keys(views).forEach(function (k) { var v = $(views[k]); if (v) v.hidden = k !== area; });
@@ -1969,6 +1968,27 @@ try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", func
 applyTheme(themeMode());
 
 /* User management (admins only). Firestore rules decide who may read or write these. */
+/* Users in org-tree order: managers first, each followed by the people under them (with a depth for indenting).
+   A manager who is not registered yet appears by name. */
+function orgOrder(users) {
+  var list = users.map(function (u) { return Object.assign({}, u); });
+  var ids = {}; list.forEach(function (u) { ids[u.id] = u; });
+  list.slice().forEach(function (u) {
+    if (u.manager && ids[u.manager]) return;
+    if (!u.manager && u.managerName) {
+      var vid = "name:" + u.managerName;
+      if (!ids[vid]) { ids[vid] = { id: vid, fullName: u.managerName, role: "עדיין לא רשום/ה באתר", virtual: true }; list.push(ids[vid]); }
+      u.manager = vid;
+    } else if (u.manager && !ids[u.manager]) u.manager = "";
+  });
+  var kids = {}; list.forEach(function (u) { (kids[u.manager || ""] = kids[u.manager || ""] || []).push(u); });
+  var byName = function (a, b) { return (a.fullName || a.name || "").localeCompare(b.fullName || b.name || "", "he"); };
+  var out = [], seen = {};
+  function walk(u, d) { if (seen[u.id]) return; seen[u.id] = 1; u._depth = d; out.push(u); (kids[u.id] || []).sort(byName).forEach(function (c) { walk(c, Math.min(d + 1, 6)); }); }
+  (kids[""] || []).sort(function (a, b) { return ((kids[b.id] || []).length - (kids[a.id] || []).length) || byName(a, b); }).forEach(function (u) { walk(u, 0); });
+  list.forEach(function (u) { if (!seen[u.id]) walk(u, 0); });
+  return out;
+}
 function renderOrg() {
   var box = $("orgTree"); if (!box) return;
   var users = (state.users || []).concat(state.pausedUsers || []).filter(function (u) { return u.name || u.fullName; });
@@ -2013,7 +2033,7 @@ async function loadUsers() {
     var us = await db.collection("users").get();
     var as = await db.collection("admins").get();
     var admins = {}; as.forEach(function (d) { admins[d.id] = true; });
-    var list = [], paused = {}; state.pausedUsers = []; us.forEach(function (d) { var dd = d.data() || {}; if (dd.paused) { paused[d.id] = true; state.pausedUsers.push({ id: d.id, name: dd.name || "", fullName: dd.fullName || "", role: dd.role || "", manager: dd.manager || "", managerName: dd.managerName || "", paused: true }); return; } list.push({ id: d.id, name: dd.name || "", fullName: dd.fullName || "", idNumber: dd.idNumber || "", role: dd.role || "", manager: dd.manager || "", managerName: dd.managerName || "", admin: !!admins[d.id] }); });
+    var list = [], paused = {}; state.pausedUsers = []; us.forEach(function (d) { var dd = d.data() || {}; if (dd.paused) { paused[d.id] = true; state.pausedUsers.push({ id: d.id, name: dd.name || "", fullName: dd.fullName || "", role: dd.role || "", manager: dd.manager || "", managerName: dd.managerName || "", unit: dd.unit || "", idNumber: dd.idNumber || "", paused: true }); return; } list.push({ id: d.id, name: dd.name || "", fullName: dd.fullName || "", idNumber: dd.idNumber || "", role: dd.role || "", manager: dd.manager || "", managerName: dd.managerName || "", unit: dd.unit || "", admin: !!admins[d.id] }); });
     Object.keys(admins).forEach(function (id) { if (!paused[id] && !list.some(function (x) { return x.id === id; })) list.push({ id: id, name: "", admin: true }); });
     list.sort(function (a, b) { return (b.admin - a.admin) || (a.name || shortId(a.id)).localeCompare(b.name || shortId(b.id), "he"); });
     state.users = list;
@@ -2048,6 +2068,7 @@ async function loadPending() {
       if (d.role) { var rl = document.createElement("span"); rl.className = "pend-role"; rl.textContent = d.role; sm.appendChild(rl); }
       if (en) { var eb = document.createElement("bdi"); eb.textContent = en; sm.appendChild(eb); }
       if (d.idNumber) { var ib = document.createElement("bdi"); ib.className = "pend-id"; ib.textContent = "ת״ז " + d.idNumber; sm.appendChild(ib); }
+      if (d.unit) { var ub = document.createElement("span"); ub.className = "pend-mgr"; ub.textContent = d.unit; sm.appendChild(ub); }
       if (d.managerName) { var mb = document.createElement("span"); mb.className = "pend-mgr"; mb.textContent = "אחראי/ת: " + d.managerName; sm.appendChild(mb); }
       who.appendChild(st); who.appendChild(sm); row.appendChild(who);
       var acts = document.createElement("div"); acts.className = "acts";
@@ -2059,7 +2080,7 @@ async function loadPending() {
         try {
           var ex = await db.collection("users").doc(email).get();
           if (ex.exists) { pendMsg("כבר קיים משתמש בשם %s. אפשר לדחות את הבקשה או לשנות את שם המשתמש הקיים.", [uid]); return; }
-          await db.collection("users").doc(email).set({ name: name, fullName: (d.fullName || "").trim(), idNumber: d.idNumber || "", role: d.role || "", manager: d.manager || "", managerName: d.managerName || "" });
+          await db.collection("users").doc(email).set({ name: name, fullName: (d.fullName || "").trim(), idNumber: d.idNumber || "", role: d.role || "", manager: d.manager || "", managerName: d.managerName || "", unit: d.unit || "" });
           await db.collection("pending").doc(it.id).delete();
           try {
             var waiting = await db.collection("users").where("managerName", "==", (d.fullName || "").trim()).get();
@@ -2100,7 +2121,9 @@ function renderUsers() {
   var USERS_SHOWN = 4;
   var all = state.users || [], q = ($("usersSearch").value || "").trim().toLowerCase();
   $("usersSearch").hidden = all.length <= USERS_SHOWN;
-  var list = q ? all.filter(function (u) { return (u.name || "").toLowerCase().indexOf(q) !== -1 || u.id.toLowerCase().indexOf(q) !== -1; }) : all;
+  /* Without a search the users are shown as the org tree: everyone under their direct manager. */
+  var list = q ? all.filter(function (u) { return (u.fullName || u.name || "").toLowerCase().indexOf(q) !== -1 || u.id.toLowerCase().indexOf(q) !== -1; }) : orgOrder(all.concat(state.pausedUsers || []));
+  if (!q) USERS_SHOWN = 10000;
   var more = $("usersMore"), hidden = 0;
   more.hidden = true;
   if (q && !list.length) { var none = document.createElement("p"); none.className = "note"; none.textContent = "לא נמצאו משתמשים."; box.appendChild(none); }
@@ -2117,7 +2140,8 @@ function renderUsers() {
   var from = state.usersPage * USERS_SHOWN;
   list.slice(from, from + USERS_SHOWN).forEach(function (u) {
     var self = u.id === me;
-    var row = document.createElement("div"); row.className = "user-row";
+    var row = document.createElement("div"); row.className = "user-row" + (q ? "" : " tree-row") + (u.virtual ? " virtual" : "");
+    if (!q && u._depth) row.style.paddingInlineStart = (u._depth * 26) + "px";
     var av = document.createElement("div"); av.className = "u-av" + (u.admin ? " admin" : ""); av.setAttribute("aria-hidden", "true");
     var nameParts = (u.fullName || u.name || shortId(u.id)).trim().split(/\s+/);
     av.textContent = (nameParts[0].charAt(0) + (nameParts.length > 1 ? nameParts[1].charAt(0) : "")).toUpperCase();
@@ -2125,16 +2149,20 @@ function renderUsers() {
     var nr = document.createElement("div"); nr.className = "name-row";
     var strong = document.createElement("strong"); strong.textContent = u.fullName || u.name || "(ללא שם)"; nr.appendChild(strong);
     if (u.admin) { var c = document.createElement("span"); c.className = "tag"; c.textContent = "מנהל"; nr.appendChild(c); }
+    if (u.paused) { var pz = document.createElement("span"); pz.className = "tag paused"; pz.textContent = "מושהה"; nr.appendChild(pz); }
+    if (!u.virtual && !u.manager && NO_MANAGER_ROLES.indexOf(u.role) === -1) { var mm = document.createElement("span"); mm.className = "miss-mgr"; mm.textContent = "חסר אחראי ישיר"; nr.appendChild(mm); }
     var meta = document.createElement("div"); meta.className = "u-meta";
     var bits = [];
     if (u.role) bits.push(["role", u.role]);
+    if (u.unit) bits.push(["role", u.unit]);
     if (u.idNumber) bits.push(["id", u.idNumber]);
-    bits.push(["un", shortId(u.id)]);
+    if (!u.virtual) bits.push(["un", shortId(u.id)]);
     bits.forEach(function (bt, i) {
       if (i) { var d = document.createElement("i"); d.className = "u-dot"; meta.appendChild(d); }
       var e = document.createElement(bt[0] === "role" ? "span" : "bdi"); e.className = "u-" + bt[0]; e.textContent = bt[1]; meta.appendChild(e);
     });
     who.appendChild(nr); who.appendChild(meta);
+    if (u.virtual) { row.appendChild(av); row.appendChild(who); box.appendChild(row); return; }
     var more = document.createElement("button"); more.type = "button"; more.className = "u-more"; more.setAttribute("aria-label", "פעולות עבור " + (u.name || shortId(u.id))); more.setAttribute("aria-haspopup", "menu"); more.setAttribute("aria-expanded", "false");
     more.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>';
     var menu = document.createElement("div"); menu.className = "u-menu"; menu.hidden = true; menu.setAttribute("role", "menu");
@@ -2232,6 +2260,11 @@ function editUser(u, opts) {
   body.appendChild(fieldBlock("שם מלא", fn, "euName"));
   body.appendChild(fieldBlock("תעודת זהות", idn, "euId"));
   var rw = document.createElement("div"); rw.className = "eu-f"; var rlab = document.createElement("span"); rlab.className = "eu-lab"; rlab.textContent = "תפקיד"; rw.appendChild(rlab); rw.appendChild(rl); body.appendChild(rw);
+  var unitSel = document.createElement("select"); unitSel.className = "field"; unitSel.id = "euUnit";
+  var uo0 = document.createElement("option"); uo0.value = ""; uo0.textContent = "בחירה…"; unitSel.appendChild(uo0);
+  var unitList = (window.Forum && Forum.Units.list || []).slice(); if (u.unit && unitList.indexOf(u.unit) === -1) unitList.push(u.unit);
+  unitList.forEach(function (x) { var o = document.createElement("option"); o.value = x; o.textContent = x; if (x === u.unit) o.selected = true; unitSel.appendChild(o); });
+  body.appendChild(fieldBlock("גדוד / צוות", unitSel, "euUnit"));
   var mgrSel = null, mgrRow = null;
   if (state.isAdmin && state.users) {
     mgrSel = document.createElement("select"); mgrSel.className = "field"; mgrSel.id = "euMgr";
@@ -2281,7 +2314,7 @@ function editUser(u, opts) {
         try { await cu.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(cu.email, pwOld.value)); }
         catch (pe2) { var pc = pe2 && pe2.code || ""; err.textContent = pc === "auth/too-many-requests" ? "יותר מדי ניסיונות. נסו שוב בעוד כמה דקות." : "הסיסמה הנוכחית שגויה."; save.disabled = false; return; }
       }
-      var upd = { name: name.split(" ")[0], fullName: name, idNumber: id, role: role };
+      var upd = { name: name.split(" ")[0], fullName: name, idNumber: id, role: role, unit: unitSel.value };
       if (mgrSel) { upd.manager = NO_MANAGER_ROLES.indexOf(role) !== -1 ? "" : mgrSel.value; upd.managerName = upd.manager ? userName(upd.manager) : ""; }
       await db.collection("users").doc(u.id).set(upd, { merge: true });
       var meId = auth.currentUser ? auth.currentUser.email.toLowerCase() : "";
@@ -2348,6 +2381,7 @@ firebase.initializeApp({
 });
 auth = firebase.auth();
 db = firebase.firestore();
+try { db.enablePersistence({ synchronizeTabs: true }).catch(function () {}); } catch (e) {}
 
 /* Firebase signs in with an email, so a plain user name gets a fixed internal domain added. */
 function loginId(v) {

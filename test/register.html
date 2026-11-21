@@ -138,6 +138,11 @@ label.l small { font-weight:500; color: var(--muted); margin-inline-start:6px; }
         <input type="radio" name="role" id="r8" value="מדריכת שכבה"><label for="r8">מדריכת שכבה</label>
       </div>
       <div class="msg" id="m-role"></div>
+      <div id="unitWrap" style="margin-top:14px">
+        <label class="l" for="unit">גדוד / צוות</label>
+        <select class="f" id="unit" style="padding-right:14px"><option value="">בחירה מהרשימה…</option></select>
+        <div class="msg" id="m-unit"></div>
+      </div>
       <div id="mgrWrap" hidden style="margin-top:14px">
         <label class="l" for="mgr">מי האחראי/ת הישיר/ה שלך?</label>
         <select class="f" id="mgr" style="padding-right:14px"><option value="">בחירה מהרשימה…</option></select>
@@ -190,11 +195,12 @@ $("f").addEventListener("submit", async function (ev) {
   if (!/^[a-z]{3,20}$/.test(first)) ok = fail("first", "שם משתמש: 3 עד 20 אותיות באנגלית, בלי רווחים וספרות.") && ok;
   if (!rb) { $("m-role").textContent = "נא לבחור תפקיד."; ok = false; }
   var needMgr = rb && NO_MGR.indexOf(rb.value) === -1, mgr = $("mgr").value;
+  if (UNITS.length && !$("unit").value) { $("m-unit").textContent = "נא לבחור גדוד / צוות."; ok = false; }
   if (needMgr && !mgr && MANAGERS.length) { $("m-mgr").textContent = "נא לבחור אחראי/ת ישיר/ה."; ok = false; }
   if (!ok || document.querySelector(".msg:not(:empty)")) return;
   var btn = $("go"); btn.disabled = true; $("goTxt").textContent = "שולח…";
   try {
-    await db.collection("pending").doc(idn).set({ idNumber: idn, fullName: full, first: first, last: last, role: rb.value, manager: needMgr ? mgr : "", managerName: needMgr && mgr ? $("mgr").selectedOptions[0].dataset.name : "", at: firebase.firestore.FieldValue.serverTimestamp() });
+    await db.collection("pending").doc(idn).set({ idNumber: idn, fullName: full, first: first, last: last, role: rb.value, unit: $("unit").value || "", manager: needMgr ? mgr : "", managerName: needMgr && mgr ? $("mgr").selectedOptions[0].dataset.name : "", at: firebase.firestore.FieldValue.serverTimestamp() });
     $("f").hidden = true; $("done").hidden = false; window.scrollTo(0, 0);
   } catch (e) {
     var dup = e && e.code === "permission-denied";
@@ -204,7 +210,13 @@ $("f").addEventListener("submit", async function (ev) {
 });
 
 /* Direct manager: alumni have none; everyone else picks one from a public list kept up to date by the sync job. */
-var NO_MGR = ["מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריכת שכבה", "בוגר"], MANAGERS = [];
+var NO_MGR = ["מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריכת שכבה", "בוגר"], MANAGERS = [], UNITS = [];
+$("unit").addEventListener("change", function () { $("m-unit").textContent = ""; });
+db.collection("public").doc("units").get().then(function (s) {
+  UNITS = (s.exists && s.data().list) || [];
+  UNITS.forEach(function (u) { var o = document.createElement("option"); o.value = u; o.textContent = u; $("unit").appendChild(o); });
+  $("unitWrap").hidden = !UNITS.length;
+}).catch(function () { $("unitWrap").hidden = true; });
 function syncMgr() { var rb = document.querySelector('input[name=role]:checked'); $("mgrWrap").hidden = !rb || NO_MGR.indexOf(rb.value) !== -1 || !MANAGERS.length; }
 Array.prototype.forEach.call(document.querySelectorAll('input[name=role]'), function (r) { r.addEventListener("change", function () { $("m-mgr").textContent = ""; syncMgr(); }); });
 $("mgr").addEventListener("change", function () { $("m-mgr").textContent = ""; });
