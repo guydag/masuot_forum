@@ -1290,7 +1290,8 @@
     });
     c.appendChild(tx);
     var acts = el("div", "acts");
-    var open = !locked && d >= today() && !mineOnly && room > 0;
+    /* איזור אש with room for fewer than 10 is not offered any more. */
+    var open = !locked && d >= today() && !mineOnly && (p.cap && taken ? room >= 10 : room > 0);
     if (open) acts.appendChild(btn(taken ? "עוד" : "שריון", (taken ? "ghost" : "primary") + " tiny", function () { Book.form(d, p); }, taken ? "plus" : ""));
     c.appendChild(acts);
     return c;
