@@ -587,3 +587,5 @@ body.tg-dragging, body.tg-dragging * { cursor: grabbing !important; }
 @media (max-width: 899px) {
   body.signed:not([data-area="cal"]) .view.fv::after { content: ""; display: block; flex: none; height: calc(64px + env(safe-area-inset-bottom)); }
 }
+/* Scrolling to the top must not reload the page (pull to refresh). */
+html, body { overscroll-behavior-y: none; }
