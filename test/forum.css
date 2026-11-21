@@ -589,3 +589,7 @@ body.tg-dragging, body.tg-dragging * { cursor: grabbing !important; }
 }
 /* Scrolling to the top must not reload the page (pull to refresh). */
 html, body { overscroll-behavior-y: none; }
+/* Sliding between months must never widen the page (iPhone would zoom out). */
+html { overflow-x: clip; }
+body { overflow-x: hidden; }
+#viewCal { overflow-x: clip; overflow-clip-margin: 24px; max-width: 100%; }
