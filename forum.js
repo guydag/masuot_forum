@@ -1388,7 +1388,7 @@
         await db.runTransaction(async function (tx) {
           var cur = await tx.get(ref);
           if (cur.exists && !(editing && cur.data().uid === me.id)) throw new Error("taken");
-          var doc = { date: d, area: p.key, areaName: p.name, text: text, fields: f, uid: me.id, byName: myName(), role: me.role, at: editing && b.at ? b.at : ts() };
+          var doc = { date: d, area: p.key, areaName: p.name, text: text, fields: f, uid: me.id, byName: myName(), role: me.role, site: location.origin + location.pathname, at: editing && b.at ? b.at : ts() };
           tx.set(ref, doc);
         });
         closePreview();

@@ -726,6 +726,33 @@ class Sync:
         self.last_modified = meta.get("modifiedTime")
         return True
 
+    def remind_bogers(self):
+        """Three days and one day before an activity: a reminder to whoever booked an area that needs a בוגר and hasn't written one."""
+        from zoneinfo import ZoneInfo
+        now = dt.datetime.now(ZoneInfo("Asia/Jerusalem"))
+        if now.hour < 17:  # in the evening, not in the middle of the night
+            return
+        need = {"fire": "איזור אש", "out": "פעילות מחוץ לשבט"}
+        tokens = None
+        for days, key in ((3, "remind3"), (1, "remind1")):
+            day = (now.date() + dt.timedelta(days=days)).isoformat()
+            for d in self.db.collection("bookings").where("date", "==", day).stream():
+                b = d.to_dict() or {}
+                f = b.get("fields") or {}
+                if b.get("area") not in need or b.get("imported") or (f.get("boger") or "").strip() or b.get(key) or not b.get("uid"):
+                    continue
+                if tokens is None:
+                    tokens = {x.id: (x.to_dict() or {}).get("tokens", []) or [] for x in self.db.collection("subs").stream()}
+                when = "בעוד 3 ימים" if days == 3 else "מחר"
+                place = need[b["area"]] + (" · " + f["where"] if b.get("area") == "out" and f.get("where") else "")
+                link = (b.get("site") or "https://guydag.github.io/biconverter/test/") + "#book"
+                try:
+                    n = send_push(self.db, tokens, [b["uid"]], "חסר בוגר בשריון ⚠️", place + " " + when + " · " + (f.get("unit") or "") + " · אפשר להוסיף בוגר בשריון", link)
+                    print("Boger reminder", d.id, key, "->", n, "devices")
+                except Exception as e:
+                    print("Boger reminder failed:", e)
+                d.reference.set({key: True}, merge=True)
+
     def push_gear(self, docs):
         """Notifications about equipment: a new request to the direct manager, an answer to the one who asked."""
         tokens = {}
@@ -783,12 +810,16 @@ class Sync:
         self.once()
         end = time.time() + minutes * 60
         last_drive = time.time()
+        last_remind = 0
         while time.time() < end:
             time.sleep(1.5)
             try:
                 if flags["people"].is_set():
                     flags["people"].clear()
                     publish_people(self.db, self.fs, state["users"])
+                if time.time() - last_remind >= 600:
+                    last_remind = time.time()
+                    self.remind_bogers()
                 if flags["gear"].is_set():
                     flags["gear"].clear()
                     self.push_gear(state["gear"])
