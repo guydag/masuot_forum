@@ -272,7 +272,7 @@
   };
   /* The gadud / team in a form: filled in by itself; צוות הובלה type it freely. */
   function unitField(val) {
-    if (isLead()) return input("text", val || "", "לאיזה גדוד / צוות?");
+    if (isLead()) return input("text", val || "", "");
     if (me.unit && (!val || val === me.unit)) { var d = el("output", "unit-fixed", me.unit); d.value = me.unit; return d; }
     return unitSelect(val);
   }
