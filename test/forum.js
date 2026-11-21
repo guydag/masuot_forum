@@ -1173,7 +1173,7 @@
      Area bookings (שריון מתחמים)
      ====================================================================== */
   var PLACES = [
-    { key: "fire", name: "איזור אש", icon: "fire", needBoger: true, cap: 50, hint: "יש לתאם עם בוגר בהודעה, ולכתוב אותו לאחר התיאום. באיזור אש יכולים להיות עד 50 חניכים, או גדוד / צוות אחד אם הוא גדול יותר." },
+    { key: "fire", name: "איזור אש", icon: "fire", needBoger: true, cap: 50, hint: "יש לתאם עם בוגר בהודעה, ולכתוב אותו לאחר התיאום. באיזור אש יכולים להיות עד 50 אנשים, או גדוד / צוות אחד אם הוא גדול יותר." },
     { key: "home", name: "פעילות בבית", icon: "house" },
     { key: "out", name: "פעילות מחוץ לשבט", icon: "bus", multi: true, needBoger: true, hint: "צריך אישור הורים בוואטסאפ או בכתב." },
     { key: "proj", name: "מקרן", icon: "proj", noCount: true }
@@ -1290,7 +1290,7 @@
     });
     c.appendChild(tx);
     var acts = el("div", "acts");
-    if (p.cap && taken && !mineOnly) tx.appendChild(el("span", "free-t", room > 0 ? "נשארו מקומות ל-" + room + " חניכים" : "מלא"));
+    if (p.cap && taken && !mineOnly) tx.appendChild(el("span", "free-t", room > 0 ? "נשארו מקומות ל-" + room + " אנשים" : "מלא"));
     var open = !locked && d >= today() && !mineOnly && room > 0;
     if (open) acts.appendChild(btn(taken ? "עוד" : "שריון", (taken ? "ghost" : "primary") + " tiny", function () { Book.form(d, p); }, taken ? "plus" : ""));
     c.appendChild(acts);
@@ -1310,8 +1310,8 @@
     var editing = !!b, vals = (b && b.fields) || {};
     var body = el("form", "eu-body"); body.noValidate = true;
     if (p.hint) body.appendChild(el("div", "fv-info", p.hint));
-    var unit = unitField(vals.unit), count = input("number", vals.count || "", "כמה חניכים");
-    var row = el("div", "frow"); row.appendChild(field("גדוד / צוות", unit)); if (!p.noCount) row.appendChild(field("כמות חניכים", count)); body.appendChild(row);
+    var unit = unitField(vals.unit), count = input("number", vals.count || "", "כמה אנשים");
+    var row = el("div", "frow"); row.appendChild(field("גדוד / צוות", unit)); if (!p.noCount) row.appendChild(field("כמות אנשים", count)); body.appendChild(row);
     var ex = {};
     if (p.key === "out") {
       var takenG = {}; Book.list.forEach(function (x) { if (x.date === d && x.area === "out" && x.fields && x.id !== (b && b.id)) takenG[x.fields.place] = 1; });
@@ -1348,9 +1348,9 @@
       if (p.cap) {
         var others = Book.list.filter(function (x) { return x.date === d && x.area === p.key && x.id !== (b && b.id); });
         if (others.length) {
-          if (!f.count) { err.textContent = "יש לכתוב כמה חניכים מגיעים."; return; }
+          if (!f.count) { err.textContent = "יש לכתוב כמה אנשים מגיעים."; return; }
           var free = p.cap - Book.people(others);
-          if (+f.count > free) { err.textContent = free > 0 ? "נשארו מקומות רק ל-" + free + " חניכים באיזור אש בתאריך הזה." : "איזור אש מלא בתאריך הזה."; return; }
+          if (+f.count > free) { err.textContent = free > 0 ? "נשארו מקומות רק ל-" + free + " אנשים באיזור אש בתאריך הזה." : "איזור אש מלא בתאריך הזה."; return; }
         }
       }
       if (d > Book.limit()) { err.textContent = "אפשר לשריין רק עד חודשיים קדימה."; return; }
@@ -1358,7 +1358,7 @@
         var near = Book.mineNear(d);
         if (near.length) { err.textContent = "כבר יש לך שריון ב-" + shortDate(near[0].date) + ". אפשר לשריין פעם אחת בכל חודשיים."; return; }
       }
-      var text = [f.unit, f.count ? f.count + " חניכים" : "", f.hours ? f.hours : "", f.boger ? "בוגר: " + f.boger : "", f.note].filter(Boolean).join(" · ");
+      var text = [f.unit, f.count ? f.count + " אנשים" : "", f.hours ? f.hours : "", f.boger ? "בוגר: " + f.boger : "", f.note].filter(Boolean).join(" · ");
       var rnd = Math.random().toString(36).slice(2, 9);
       var id = editing ? b.id : p.key === "out" ? (f.place !== "other" ? d + "_out_" + f.place : d + "_out_" + rnd) : p.cap && Book.list.some(function (x) { return x.date === d && x.area === p.key; }) ? d + "_" + p.key + "_" + rnd : d + "_" + p.key;
       var ref = db.collection("bookings").doc(id);
