@@ -1983,7 +1983,7 @@ applyTheme(themeMode());
 /* Users in org-tree order: managers first, each followed by the people under them (with a depth for indenting).
    A manager who is not registered yet appears by name. */
 function orgOrder(users) {
-  var list = users.map(function (u) { return Object.assign({}, u); });
+  var list = users.map(function (u) { var c = Object.assign({}, u); if (/^name:/.test(c.manager || "")) c.manager = ""; return c; });
   var ids = {}; list.forEach(function (u) { ids[u.id] = u; });
   list.slice().forEach(function (u) {
     if (u.manager && ids[u.manager]) return;
