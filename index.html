@@ -39,7 +39,7 @@
 <meta name="application-name" content="פורום מוביל">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <meta name="theme-color" content="#fffaf3">
-<link rel="stylesheet" href="forum.css?v=26">
+<link rel="stylesheet" href="forum.css?v=27">
 <script>
 /* Set the theme before the page paints so a dark choice never flashes light first. */
 (function () {
@@ -742,7 +742,7 @@ button:focus-visible, summary:focus-visible, .eu-roles input:focus-visible + lab
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<script src="forum.js?v=26"></script>
+<script src="forum.js?v=27"></script>
 <script>
 document.documentElement.lang = "he";
 document.documentElement.dir = "rtl";
@@ -759,7 +759,7 @@ var ALIASES = [
   ["טיול פסח שבטי", "פסח שבטי"],
   ["יום צופה", "טיול דרגה"]
 ];
-var VERSION = "v3.0";
+var VERSION = "v3.1";
 var IS_TEST = /\/test\/(index\.html)?$/.test(location.pathname);
 if (IS_TEST) { VERSION += " · בדיקות"; (function () { var b = document.createElement("div"); b.className = "test-ribbon"; b.textContent = "סביבת בדיקות"; document.body.appendChild(b); })(); }
 /* Pull down from the top of the screen to refresh, like a regular phone app. */
@@ -791,6 +791,9 @@ if (IS_TEST) { VERSION += " · בדיקות"; (function () { var b = document.cr
   document.addEventListener("touchstart", function (e) {
     y0 = null; pull = 0;
     if (busy || e.touches.length !== 1 || document.documentElement.classList.contains("pv-open")) return;
+    /* Pull to refresh only in the reports area, and only when the page is really at the top: the other areas update by themselves. */
+    var ar = document.body.getAttribute("data-area"); if (ar && ar !== "reg") return;
+    if ((document.scrollingElement && document.scrollingElement.scrollTop > 0) || document.body.scrollTop > 0) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
     var sc = scroller(e.target);
     if (sc && sc.scrollTop > 0) return;
@@ -840,11 +843,20 @@ if (IS_TEST) { VERSION += " · בדיקות"; (function () { var b = document.cr
     if (shown || !window.fetch) return Promise.resolve();
     return fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (h) {
       var m = /var VERSION = "([^"]+)"/.exec(h);
-      if (m && m[1] !== VERSION.replace(/ · בדיקות$/, "")) offer();
+      /* A new forum.js / forum.css also counts as a new version. */
+      var fv = /forum\.(?:js|css)\?v=\d+/g, now = (h.match(fv) || []).join(","), mine = [].map.call(document.querySelectorAll('script[src*="forum.js"],link[href*="forum.css"]'), function (x) { return (x.getAttribute("src") || x.getAttribute("href")).match(/forum\.(?:js|css)\?v=\d+/)[0]; }).join(",");
+      if ((m && m[1] !== VERSION.replace(/ · בדיקות$/, "")) || (now && mine && Math.max.apply(null, now.match(/\d+/g).map(Number)) > Math.max.apply(null, mine.match(/\d+/g).map(Number)))) {
+        /* Update quietly when nothing is open; otherwise offer a refresh. */
+        var busyNow = document.documentElement.classList.contains("pv-open") || document.getElementById("pvOverlay") || (document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
+        var last = 0; try { last = +sessionStorage.getItem("autoReload") || 0; } catch (e) {}
+        if (!busyNow && Date.now() - last > 120000) { try { sessionStorage.setItem("autoReload", String(Date.now())); } catch (e) {} location.reload(); return; }
+        offer();
+      }
     }).catch(function () {});
   }
   window.checkForUpdate = check;
   setTimeout(check, 1500);
+  setInterval(function () { if (document.visibilityState === "visible") check(); }, 60000);
   document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") check(); });
 })();
 Array.prototype.forEach.call(document.querySelectorAll("[data-version]"), function (e) { e.textContent = VERSION; });
