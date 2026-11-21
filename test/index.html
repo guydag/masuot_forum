@@ -39,7 +39,7 @@
 <meta name="application-name" content="פורום מוביל">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <meta name="theme-color" content="#fffaf3">
-<link rel="stylesheet" href="forum.css?v=35">
+<link rel="stylesheet" href="forum.css?v=40">
 <script>
 /* Set the theme before the page paints so a dark choice never flashes light first. */
 (function () {
@@ -742,7 +742,7 @@ button:focus-visible, summary:focus-visible, .eu-roles input:focus-visible + lab
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<script src="forum.js?v=39"></script>
+<script src="forum.js?v=40"></script>
 <script>
 document.documentElement.lang = "he";
 document.documentElement.dir = "rtl";
@@ -2304,7 +2304,11 @@ function editUser(u, opts) {
   var uo0 = document.createElement("option"); uo0.value = ""; uo0.textContent = "בחירה…"; unitSel.appendChild(uo0);
   var unitList = (window.Forum && Forum.Units.list || []).slice(); if (u.unit && unitList.indexOf(u.unit) === -1) unitList.push(u.unit);
   unitList.forEach(function (x) { var o = document.createElement("option"); o.value = x; o.textContent = x; if (x === u.unit) o.selected = true; unitSel.appendChild(o); });
-  body.appendChild(fieldBlock("גדוד / צוות", unitSel, "euUnit"));
+  /* צוות הובלה have no gadud / team. */
+  var LEAD_R = ["מרכז צעיר", "מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריך שכבה"];
+  var unitBlock = fieldBlock("גדוד / צוות", unitSel, "euUnit"); body.appendChild(unitBlock);
+  var syncUnit = function () { unitBlock.hidden = LEAD_R.indexOf(role) !== -1; };
+  syncUnit(); rl.addEventListener("click", function () { setTimeout(syncUnit, 0); });
   var mgrSel = null, mgrRow = null;
   if (state.isAdmin && state.users) {
     mgrSel = document.createElement("select"); mgrSel.className = "field"; mgrSel.id = "euMgr";
@@ -2354,7 +2358,7 @@ function editUser(u, opts) {
         try { await cu.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(cu.email, pwOld.value)); }
         catch (pe2) { var pc = pe2 && pe2.code || ""; err.textContent = pc === "auth/too-many-requests" ? "יותר מדי ניסיונות. נסו שוב בעוד כמה דקות." : "הסיסמה הנוכחית שגויה."; save.disabled = false; return; }
       }
-      var upd = { name: name.split(" ")[0], fullName: name, idNumber: id, role: role, unit: unitSel.value };
+      var upd = { name: name.split(" ")[0], fullName: name, idNumber: id, role: role, unit: LEAD_R.indexOf(role) !== -1 ? "" : unitSel.value };
       if (mgrSel) { upd.manager = NO_MANAGER_ROLES.indexOf(role) !== -1 ? "" : mgrSel.value; upd.managerName = upd.manager ? userName(upd.manager) : ""; }
       await db.collection("users").doc(u.id).set(upd, { merge: true });
       var meId = auth.currentUser ? auth.currentUser.email.toLowerCase() : "";
