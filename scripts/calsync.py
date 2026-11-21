@@ -240,6 +240,7 @@ class Sheet:
                         "date": dates[0].isoformat(), "end": dates[-1].isoformat(),
                         "color": color[2:] if color else "", "cat": legend.get(color, "") if color else "",
                     })
+                    ev["act"] = color == "FFFFE598" or ev["title"].strip().startswith("פעול")
                     out.append(ev)
         return out
 
@@ -391,8 +392,8 @@ def load(book):
         for k, v in sh.legend().items():
             if k not in legend and v not in legend.values():
                 legend[k] = v
-    # The yellow of regular activities is not in the sheet's colour key.
-    legend.setdefault("FFFFE598", "פעולה")
+    # The yellow of regular activities is not in the sheet's colour key; it counts as "שגרה".
+    legend["FFFFE598"] = "שגרה"
     return sheets, legend
 
 
@@ -584,26 +585,57 @@ def drive_upload(s, data):
     return r.json()
 
 
-def publish_managers(db, firestore):
-    """The registration page lets a new user pick their direct manager; it can't read the users list, so keep a public copy of the names."""
+ROLE_KEY = {"מדריך קורס": "course", "ראשג״ד": "rashgad", "ראש״צ": "rashatz", "מרכז צעיר": "young", "מרכז בוגר": "senior",
+            "דרג מתנדב": "volunteer", "מלווה ט׳": "escort", "מדריכת שכבה": "layer"}
+
+
+def publish_people(db, firestore, users):
+    """From the users: the public list of possible direct managers (for the registration page)
+    and the org tree that the site uses to route equipment requests."""
     try:
-        out = []
-        for d in db.collection("users").stream():
-            u = d.to_dict() or {}
-            if u.get("paused") or u.get("role") not in ("מרכז צעיר", "מרכז בוגר"):
-                continue
-            out.append({"id": d.id, "name": u.get("fullName") or u.get("name") or d.id.split("@")[0], "role": u.get("role")})
-        out.sort(key=lambda x: (x["role"] != "מרכז בוגר", x["name"]))
+        managers, tree = [], {}
+        for uid, u in users.items():
+            name = u.get("fullName") or u.get("name") or uid.split("@")[0]
+            tree[uid] = {"n": name, "r": u.get("role", ""), "m": u.get("manager", ""), "u": u.get("unit", "")}
+            if not u.get("paused") and u.get("role") in ("מרכז צעיר", "מרכז בוגר"):
+                managers.append({"id": uid, "name": name, "role": u.get("role")})
+        managers.sort(key=lambda x: (x["role"] != "מרכז בוגר", x["name"]))
         ref = db.collection("public").document("managers")
         cur = ref.get()
-        if not cur.exists or (cur.to_dict() or {}).get("list") != out:
-            ref.set({"list": out, "at": firestore.SERVER_TIMESTAMP})
+        if not cur.exists or (cur.to_dict() or {}).get("list") != managers:
+            ref.set({"list": managers, "at": firestore.SERVER_TIMESTAMP})
+        ref2 = db.collection("org").document("tree")
+        cur2 = ref2.get()
+        if not cur2.exists or (cur2.to_dict() or {}).get("map") != tree:
+            ref2.set({"map": tree, "at": firestore.SERVER_TIMESTAMP})
     except Exception as e:
-        print("Could not update the managers list:", e)
+        print("Could not update the people lists:", e)
+
+
+def send_push(db, tokens_by_user, emails, title, body, link):
+    from firebase_admin import messaging
+    owners = {}
+    for e in emails:
+        for t in tokens_by_user.get(e, []):
+            owners[t] = e
+    tokens = list(owners)
+    if not tokens:
+        return 0
+    res = messaging.send_each_for_multicast(messaging.MulticastMessage(
+        tokens=tokens,
+        webpush=messaging.WebpushConfig(
+            notification=messaging.WebpushNotification(title=title, body=body, icon="https://guydag.github.io/biconverter/icon-192.png?v=3", badge="https://guydag.github.io/biconverter/icon-192.png?v=3", direction="rtl", language="he"),
+            fcm_options=messaging.WebpushFCMOptions(link=link))))
+    for r, t in zip(res.responses, tokens):
+        code = getattr(r.exception, "code", "") if r.exception else ""
+        if r.exception and ("not-registered" in str(code).lower() or "unregistered" in str(code).lower() or "invalid" in str(code).lower()):
+            from firebase_admin import firestore as fs
+            db.collection("subs").document(owners[t]).set({"tokens": fs.ArrayRemove([t])}, merge=True)
+    return res.success_count
 
 
 class Sync:
-    """One connection to Firestore and Drive, used for a single sync or for a watch loop."""
+    """One connection to Firestore and Drive, used for a single sync or for a watch."""
 
     def __init__(self, info):
         import firebase_admin
@@ -616,6 +648,9 @@ class Sync:
         self.s = drive_session(info)
         self.status = self.db.collection("cal").document("status")
         self.last_modified = None
+        self.hidden = {}
+        self.book = None
+        self.written = {}
 
     def pending_ops(self):
         ops = []
@@ -625,7 +660,35 @@ class Sync:
             ops.append(o)
         return ops
 
-    def once(self, ops=None):
+    def store(self, book, modified):
+        """Events for managers (cal/all) and one copy per role, without the categories that role may not see."""
+        sheets, legend = load(book)
+        evs = all_events(sheets, legend)
+        cats, seen = [], set()
+        for k, v in legend.items():
+            if v not in seen:
+                seen.add(v)
+                cats.append({"name": v, "color": k[2:]})
+        docs = {"all": (evs, cats)}
+        roles = list(ROLE_KEY.items())
+        hidden_all = set.intersection(*[set(self.hidden.get(r, [])) for r, _ in roles]) if roles else set()
+        hidden_any = set().union(*[set(self.hidden.get(r, [])) for r, _ in roles]) if roles else set()
+        for role, key in roles + [("", "none")]:
+            hide = set(self.hidden.get(role, [])) if role else hidden_any
+            docs["v_" + key] = ([e for e in evs if not e["cat"] or e["cat"] not in hide], [c for c in cats if c["name"] not in hide])
+        for key, (ev, cs) in docs.items():
+            payload = json.dumps(ev, ensure_ascii=False)
+            sig = hash(payload + json.dumps(cs, ensure_ascii=False))
+            if self.written.get(key) == sig:
+                continue
+            self.db.collection("cal").document(key).set({
+                "events": payload, "cats": cs, "count": len(ev),
+                "fileModified": modified, "at": self.fs.SERVER_TIMESTAMP,
+            })
+            self.written[key] = sig
+        return len(evs)
+
+    def once(self, ops=None, reload=True):
         """Apply waiting changes to the Excel, then store the events. Returns False if Drive can't be reached."""
         fs, db, s = self.fs, self.db, self.s
         try:
@@ -637,7 +700,9 @@ class Sync:
             return False
         if ops is None:
             ops = self.pending_ops()
-        book = Book(drive_download(s))
+        if reload or self.book is None or meta.get("modifiedTime") != self.last_modified:
+            self.book = Book(drive_download(s))
+        book = self.book
         if ops:
             results = apply_ops(book, ops)
             if book.changed:
@@ -645,56 +710,113 @@ class Sync:
                 now = drive_meta(s)
                 if now.get("headRevisionId") != meta.get("headRevisionId") or now.get("modifiedTime") != meta.get("modifiedTime"):
                     print("The file changed in Drive while syncing; trying again in a moment.")
+                    self.book = None
                     return True
                 new_bytes = book.save()
                 drive_upload(s, new_bytes)
-                book = Book(new_bytes)
+                book = self.book = Book(new_bytes)
                 meta = drive_meta(s)
             for o in ops:
                 r = results.get(o["id"], {"ok": False, "error": "לא טופל"})
                 db.collection("cal_ops").document(o["id"]).set(
                     {"state": "done" if r.get("ok") else "failed", "error": r.get("error", ""), "doneAt": fs.SERVER_TIMESTAMP}, merge=True)
-            print("Applied", len(ops), "changes:", results)
-        sheets, legend = load(book)
-        evs = all_events(sheets, legend)
-        cats = [{"name": v, "color": k[2:]} for k, v in legend.items()]
-        payload = json.dumps(evs, ensure_ascii=False)
-        db.collection("cal").document("all").set({
-            "events": payload, "cats": cats, "count": len(evs),
-            "fileModified": meta.get("modifiedTime"), "at": fs.SERVER_TIMESTAMP,
-        })
-        self.status.set({"ok": True, "error": "", "count": len(evs), "at": fs.SERVER_TIMESTAMP})
+            print(time.strftime("%H:%M:%S"), "Applied", len(ops), "changes:", results)
+        n = self.store(book, meta.get("modifiedTime"))
+        self.status.set({"ok": True, "error": "", "count": n, "at": fs.SERVER_TIMESTAMP})
         self.last_modified = meta.get("modifiedTime")
-        print(time.strftime("%H:%M:%S"), "Stored", len(evs), "events.")
         return True
 
-    def watch(self, minutes):
-        """Keep watching for a while: a change in the site or in the Excel shows up within seconds."""
-        end = time.time() + minutes * 60
-        publish_managers(self.db, self.fs)
-        self.once()
-        last_drive = last_mgr = time.time()
-        while time.time() < end:
-            time.sleep(6)
+    def push_gear(self, docs):
+        """Notifications about equipment: a new request to the direct manager, an answer to the one who asked."""
+        tokens = {}
+        for d in self.db.collection("subs").stream():
+            tokens[d.id] = (d.to_dict() or {}).get("tokens", []) or []
+        admins = [d.id for d in self.db.collection("admins").stream()]
+        words = {"approved": "אושרה ✅", "changes": "הוחזרה לתיקון ✏️", "rejected": "נדחתה"}
+        for d in docs:
+            g = d.to_dict() or {}
+            link = (g.get("site") or "https://guydag.github.io/biconverter/") + "#gear"
             try:
-                ops = self.pending_ops()
-                if ops:
-                    time.sleep(2)  # let a burst of edits arrive together
-                    self.once()
+                if g.get("pushTo") == "owner":
+                    st = g.get("status", "")
+                    note = ((g.get("review") or {}).get("note") or "")
+                    n = send_push(self.db, tokens, [g.get("uid", "")], "בקשת הציוד שלך " + words.get(st, "עודכנה"),
+                                  (g.get("unit") or "") + " · " + (g.get("date") or "") + (" · " + note if note else ""), link)
+                else:
+                    to = [x for x in (g.get("notifyTo") or []) if x != g.get("uid")] or [a for a in admins if a != g.get("uid")]
+                    n = send_push(self.db, tokens, to, "בקשת ציוד חדשה לאישור 📦",
+                                  (g.get("byName") or "") + " · " + (g.get("unit") or "") + " · " + str(len(g.get("items") or [])) + " פריטים", link)
+                print("Gear push", d.id, "->", n, "devices")
+            except Exception as e:
+                print("Gear push failed:", e)
+            d.reference.set({"push": "done"}, merge=True)
+
+    def watch(self, minutes):
+        """Keep watching for a while: a change in the site or in the Excel goes through within seconds."""
+        import threading
+        flags = {"ops": threading.Event(), "cfg": threading.Event(), "people": threading.Event(), "gear": threading.Event()}
+        state = {"users": {}, "gear": []}
+
+        def on_ops(snaps, changes, read_time):
+            if snaps:
+                flags["ops"].set()
+
+        def on_cfg(snaps, changes, read_time):
+            for s in snaps:
+                self.hidden = (s.to_dict() or {}).get("hidden", {}) or {}
+            flags["cfg"].set()
+
+        def on_users(snaps, changes, read_time):
+            state["users"] = {s.id: (s.to_dict() or {}) for s in snaps}
+            flags["people"].set()
+
+        def on_gear(snaps, changes, read_time):
+            state["gear"] = list(snaps)
+            if snaps:
+                flags["gear"].set()
+
+        w = [self.db.collection("cal_ops").where("state", "==", "pending").on_snapshot(on_ops),
+             self.db.collection("config").document("calendar").on_snapshot(on_cfg),
+             self.db.collection("users").on_snapshot(on_users),
+             self.db.collection("gear").where("push", "==", "todo").on_snapshot(on_gear)]
+        time.sleep(3)
+        self.once()
+        end = time.time() + minutes * 60
+        last_drive = time.time()
+        while time.time() < end:
+            time.sleep(1.5)
+            try:
+                if flags["people"].is_set():
+                    flags["people"].clear()
+                    publish_people(self.db, self.fs, state["users"])
+                if flags["gear"].is_set():
+                    flags["gear"].clear()
+                    self.push_gear(state["gear"])
+                if flags["ops"].is_set():
+                    flags["ops"].clear()
+                    time.sleep(1)  # let a burst of edits arrive together
+                    self.once(reload=False)
                     last_drive = time.time()
                     continue
+                if flags["cfg"].is_set():
+                    flags["cfg"].clear()
+                    self.written = {}
+                    if self.book is not None:
+                        self.store(self.book, self.last_modified)
                 if time.time() - last_drive >= 20:
                     last_drive = time.time()
                     m = drive_meta(self.s).get("modifiedTime")
                     if m != self.last_modified:
-                        print("The Excel changed in Drive.")
+                        print(time.strftime("%H:%M:%S"), "The Excel changed in Drive.")
                         self.once([])
-                if time.time() - last_mgr >= 600:
-                    last_mgr = time.time()
-                    publish_managers(self.db, self.fs)
             except Exception as e:  # a network hiccup should not end the watch
                 print("Retrying after error:", e)
                 time.sleep(10)
+        for x in w:
+            try:
+                x.unsubscribe()
+            except Exception:
+                pass
 
 
 def run_actions(watch_minutes=0):
@@ -706,7 +828,9 @@ def run_actions(watch_minutes=0):
     if watch_minutes:
         sync.watch(watch_minutes)
     else:
-        publish_managers(sync.db, sync.fs)
+        cfg = sync.db.collection("config").document("calendar").get()
+        sync.hidden = (cfg.to_dict() or {}).get("hidden", {}) if cfg.exists else {}
+        publish_people(sync.db, sync.fs, {d.id: d.to_dict() for d in sync.db.collection("users").stream()})
         sync.once()
 
 
