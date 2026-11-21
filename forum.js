@@ -687,7 +687,6 @@
   };
   Cal.render = function (still) {
     if (!Cal.built) return;
-    dl("render");
     Cal._all = null;
     var st = Cal.st;
     var k = st.view + "|" + calPeriodKey(st.date); still = still || Cal.lastKey === k; Cal.lastKey = k;
@@ -1015,30 +1014,6 @@
     if (!c2) { var bd = 1e9; cells.forEach(function (k) { var r = k.getBoundingClientRect(), dd = Math.min(Math.abs(x - r.left), Math.abs(x - r.right)); if (dd < bd) { bd = dd; c2 = k; } }); }
     return c2 ? c2.dataset.d : null;
   }
-  /* A quiet record of what a touch on the calendar did (saved on the user's own device record), to find why dragging fails on some phones. */
-  var DLOG = { a: [], t0: 0, on: false, mv: 0, sc: 0 };
-  function dl(m) { if (DLOG.on && DLOG.a.length < 80) DLOG.a.push(Math.round(performance.now() - DLOG.t0) + " " + m); }
-  F.dl = dl;
-  document.addEventListener("touchstart", function (e) {
-    if (F.area !== "cal" || !e.target.closest || !e.target.closest(".cv-body")) return;
-    DLOG.a = []; DLOG.t0 = performance.now(); DLOG.on = true; DLOG.mv = 0; DLOG.sc = 0;
-    var t = e.target, src = ddSource(t);
-    dl("start " + (t.className || t.tagName) + " src=" + (src ? src[1] : "-") + " tg=" + !!t.closest(".tg-ev") + " edit=" + can.editCal() + " n=" + e.touches.length + " view=" + Cal.st.view);
-  }, { passive: true, capture: true });
-  document.addEventListener("touchmove", function (e) {
-    if (!DLOG.on) return; DLOG.mv++;
-    if (DLOG.mv <= 4 || DLOG.mv % 15 === 0) { var p = e.touches[0]; dl("move" + DLOG.mv + " " + Math.round(p.clientX) + "," + Math.round(p.clientY) + " prev=" + e.defaultPrevented + " canc=" + e.cancelable + " dd=" + DD.active + " mv=" + MV.active + " pend=" + !!(DD.pend || MV.pend)); }
-  }, { passive: true });
-  ["touchend", "touchcancel"].forEach(function (ty) {
-    document.addEventListener(ty, function () {
-      if (!DLOG.on) return; dl(ty + " dd=" + DD.active + " mv=" + MV.active + " moves=" + DLOG.mv); DLOG.on = false;
-      var a = DLOG.a.slice(), held = performance.now() - DLOG.t0;
-      if (held < 300) return; // a plain tap
-      setTimeout(function () { try { db.collection("subs").doc(me.id).set({ dragLog: a, dragUA: navigator.userAgent, dragAt: Date.now(), dragVer: ((document.querySelector('script[src*="forum.js"]') || {}).src || "").replace(/.*\?/, "") }, { merge: true }).catch(function () {}); } catch (_) {} }, 60);
-    }, { passive: true });
-  });
-  window.addEventListener("resize", function () { dl("resize " + window.innerWidth + "x" + window.innerHeight); });
-  document.addEventListener("scroll", function (e) { if (DLOG.on && DLOG.sc++ < 2) dl("scroll " + ((e.target && (e.target.id || e.target.className || e.target.nodeName)) || "")); }, { passive: true, capture: true });
   function buzz() { if (navigator.vibrate) try { navigator.vibrate(12); } catch (_) {} }
   /* A long press must not open the phone's own menu. */
   document.addEventListener("contextmenu", function (e) { if (e.target.closest && e.target.closest(".cv-body .cv-chip, .cv-body .cv-bar, .cv-body .tg-ev")) e.preventDefault(); });
@@ -1049,8 +1024,8 @@
     return null;
   }
   function ddStart(n, mode, x, y) {
-    var ev = ddEvent(n); dl("ddStart " + mode + " ev=" + !!ev + " conn=" + document.body.contains(n)); if (!ev) return;
-    DD.mode = mode; var under = ddDayAt(x, y); dl("under=" + under); if (!under) return;
+    var ev = ddEvent(n); if (!ev) return;
+    DD.mode = mode; var under = ddDayAt(x, y); if (!under) return;
     var sp = ddSpan(ev);
     Object.assign(DD, { active: true, ev: ev, idx: +n.dataset.i, nd: sp[1], d0: sp[0], grab: Math.max(0, Math.min(sp[1] - 1, diffDays(sp[0], under))), target: sp[0], zone: null, lastX: x, lastY: y });
     n.classList.add("mv-src");
@@ -1117,7 +1092,7 @@
     return ev;
   }
   function mvStart(b, x, y) {
-    var ev = mvEvent(b), col = b.closest(".tg-col"); dl("mvStart ev=" + !!ev + " col=" + !!col + " conn=" + document.body.contains(b)); if (!ev || !col) return;
+    var ev = mvEvent(b), col = b.closest(".tg-col"); if (!ev || !col) return;
     var s = new Date(ev.s), HH = tgHH(), r = col.getBoundingClientRect();
     Object.assign(MV, { active: true, ev: ev, idx: +b.dataset.i, dur: Math.round((ev.e - ev.s) / 6e4), d0: ymd(s), m0: s.getHours() * 60 + s.getMinutes(), zone: null });
     MV.grab = (y - r.top) / HH * 60 - MV.m0;
