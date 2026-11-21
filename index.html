@@ -696,7 +696,7 @@ button:focus-visible, summary:focus-visible, .eu-roles input:focus-visible + lab
 
       <section class="card push-card" id="pushSection" hidden>
         <div class="setting-row">
-          <div class="setting-text"><strong>התראות על דוחות חדשים</strong><span id="pushText">קבלו הודעה לטלפון כשעולה דוח של מפעל שמעניין אתכם.</span></div>
+          <div class="setting-text"><strong>התראות לטלפון</strong><span id="pushText">על בקשות ציוד שמחכות לאישור שלכם, על תשובות לבקשות הציוד שלכם ועל דוחות חדשים של מפעלים שמעניינים אתכם.</span></div>
           <button class="btn primary small" id="pushBtn" type="button">הפעלה</button>
         </div>
         <div class="push-follow" id="pushFollow" hidden>
@@ -1759,7 +1759,7 @@ async function pushSupported() {
 function pushRender() {
   var granted = window.Notification && Notification.permission === "granted" && !!push.token;
   $("pushBtn").hidden = granted; $("pushFollow").hidden = !granted;
-  $("pushText").textContent = granted ? "" : "קבלו הודעה לטלפון כשעולה דוח של מפעל שמעניין אתכם.";
+  $("pushText").textContent = granted ? "התראות על ציוד מרכז מגיעות תמיד. כאן בוחרים על דוחות של אילו מפעלים לקבל התראה." : "על בקשות ציוד שמחכות לאישור שלכם, על תשובות לבקשות הציוד שלכם ועל דוחות חדשים של מפעלים שמעניינים אתכם.";
   $("pushAll").setAttribute("aria-checked", push.sub.all ? "true" : "false");
   var box = $("pushList"); box.textContent = "";
   if (!granted || push.sub.all) return;
@@ -1889,7 +1889,7 @@ function maybeWelcome() {
     var ol = document.createElement("ol"); ol.className = "ih-steps";
     ["ביומן רואים את הלו״ז השבטי, ובלחיצה על אירוע אפשר להוסיף אותו ליומן שלכם.",
      "בסרגל למטה: שריון מתחמים, בקשת ציוד, הרשומים וקישורים שימושיים.",
-     "מוסיפים את האתר למסך הבית, וככה גם מקבלים התראה על דוחות חדשים."].forEach(function (t) { var li = document.createElement("li"); var sp = document.createElement("span"); sp.textContent = t; li.appendChild(sp); ol.appendChild(li); });
+     "מוסיפים את האתר למסך הבית, וככה גם מקבלים התראות לטלפון."].forEach(function (t) { var li = document.createElement("li"); var sp = document.createElement("span"); sp.textContent = t; li.appendChild(sp); ol.appendChild(li); });
     body.appendChild(ol);
     var foot = document.createElement("div"); foot.className = "pv-foot";
     function done() { try { localStorage.setItem("welcomeSeen2", "1"); } catch (e) {} }
