@@ -296,7 +296,7 @@
   ];
   function buildTabbar() {
     var nav = el("nav", "tabbar"); nav.setAttribute("aria-label", "אזורים");
-    var brand = el("div", "tab-brand"); brand.innerHTML = '<img src="logo.png?v=1" alt="" width="40" height="40" draggable="false"><div><b>פורום מוביל</b><small>שבט משואות</small></div>';
+    var brand = el("a", "tab-brand"); brand.href = "#home"; brand.setAttribute("aria-label", "פורום מוביל · לעמוד הבית"); brand.innerHTML = '<img src="logo.png?v=1" alt="" width="40" height="40" draggable="false"><div><b>פורום מוביל</b><small>שבט משואות</small></div>';
     nav.appendChild(brand);
     AREAS.forEach(function (a) {
       var t = el("a", "tab" + (a.bottom ? " tab-bottom" : "")); t.href = "#" + a.key; t.dataset.area = a.key;
@@ -314,7 +314,9 @@
   };
   function head(view, title, extra) {
     var h = el("header", "fv-head");
-    var logo = el("img", "fv-logo"); logo.src = "logo.png?v=1"; logo.alt = ""; logo.draggable = false; h.appendChild(logo);
+    /* The logo takes you home. */
+    var la = el("a", "fv-logo-a"); la.href = "#home"; la.setAttribute("aria-label", "לעמוד הבית");
+    var logo = el("img", "fv-logo"); logo.src = "logo.png?v=1"; logo.alt = ""; logo.draggable = false; la.appendChild(logo); h.appendChild(la);
     h.appendChild(el("h1", "", title));
     if (extra) h.appendChild(extra);
     view.appendChild(h);
