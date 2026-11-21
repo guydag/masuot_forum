@@ -352,7 +352,14 @@
       window.renderSaved = function () { orig.apply(this, arguments); F.regBadge(); };
     }
     var rz = null;
-    window.addEventListener("resize", function () { clearTimeout(rz); rz = setTimeout(function () { F.syncTabs(); if (F.area === "cal" && Cal.loaded) Cal.render(true); if (F.area === "home") Home.render(); }, 120); });
+    /* On a phone the height changes all the time (the browser bars hide and show): then only fit the calendar again. */
+    var lastW = window.innerWidth;
+    window.addEventListener("resize", function () { clearTimeout(rz); rz = setTimeout(function () {
+      var wch = window.innerWidth !== lastW; lastW = window.innerWidth;
+      F.syncTabs();
+      if (F.area === "cal" && Cal.loaded) { if (wch && !Cal.dragging()) Cal.render(true); else Cal.fit(); }
+      if (F.area === "home" && wch) Home.render();
+    }, 120); });
     document.addEventListener("visibilitychange", function () { if (!document.hidden && me.id && F.area === "home") Home.render(); });
   };
   F.regBadge = function () {
@@ -502,7 +509,7 @@
   };
   Cal.changed = function () {
     Cal._all = null;
-    if (F.area === "cal" && Cal.built) { if (!DD.active && !MV.active && !TGD.active) Cal.render(true); else Cal.renderPending = true; }
+    if (F.area === "cal" && Cal.built) { if (!Cal.dragging()) Cal.render(true); else { Cal.renderPending = true; (function retry() { setTimeout(function () { if (Cal.dragging()) return retry(); if (Cal.renderPending) { Cal.renderPending = false; Cal.render(true); } }, 600); })(); } }
     if (F.area === "home") Home.render();
     if (F.area === "book" && Book.built) Book.render();
   };
@@ -686,6 +693,9 @@
     Cal.body.innerHTML = body;
     afterCalendarRender();
   };
+  /* While an event is held or dragged the calendar must not be drawn again (it would drop the drag). */
+  Cal.dragging = function () { return !!(DD.active || MV.active || TGD.active || DD.pend || MV.pend || (TGD.touch && TGD.col)); };
+  Cal.fit = function () { if (!Cal.dragging()) calFit(); };
   function calFit() {
     var elx = Cal.body.querySelector(".cv-grid") || document.getElementById("tgscroll"); if (!elx) return;
     var bar = document.querySelector(".tabbar"), wide = window.innerWidth >= 900;
@@ -698,7 +708,7 @@
     else {
       /* week / day: 10:00–22:00 fill the visible height */
       var want = Math.max(26, Math.floor((elx.clientHeight - 4) / 12));
-      if (Math.abs(want - tgHH()) >= 1 && !calFit.busy) { Cal.hh = want; calFit.busy = true; Cal.st.tgKey = null; Cal.render(true); calFit.busy = false; }
+      if (Math.abs(want - tgHH()) >= 1 && !calFit.busy && !Cal.dragging()) { Cal.hh = want; calFit.busy = true; Cal.st.tgKey = null; Cal.render(true); calFit.busy = false; }
     }
   }
   /* Month view: nothing may be cut in half. Bars and chips that don't fit are hidden and counted in "+N" of their day. */
@@ -1290,7 +1300,8 @@
     });
     c.appendChild(tx);
     var acts = el("div", "acts");
-    /* איזור אש with room for fewer than 10 is not offered any more. */
+    /* איזור אש: how many places are left; with room for fewer than 10 it is not offered any more (and nothing is written). */
+    if (p.cap && taken && !mineOnly && room >= 10 && room !== Infinity) tx.appendChild(el("span", "free-t", "נשארו מקומות ל-" + room + " אנשים"));
     var open = !locked && d >= today() && !mineOnly && (p.cap && taken ? room >= 10 : room > 0);
     if (open) acts.appendChild(btn(taken ? "עוד" : "שריון", (taken ? "ghost" : "primary") + " tiny", function () { Book.form(d, p); }, taken ? "plus" : ""));
     c.appendChild(acts);

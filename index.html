@@ -742,7 +742,7 @@ button:focus-visible, summary:focus-visible, .eu-roles input:focus-visible + lab
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<script src="forum.js?v=27"></script>
+<script src="forum.js?v=28"></script>
 <script>
 document.documentElement.lang = "he";
 document.documentElement.dir = "rtl";
@@ -2134,7 +2134,15 @@ function renderUsers() {
   var all = state.users || [], q = ($("usersSearch").value || "").trim().toLowerCase();
   $("usersSearch").hidden = all.length <= USERS_SHOWN;
   /* Without a search the users are shown as the org tree: everyone under their direct manager. */
-  var list = q ? all.filter(function (u) { return (u.fullName || u.name || "").toLowerCase().indexOf(q) !== -1 || u.id.toLowerCase().indexOf(q) !== -1; }) : orgOrder(all.concat(state.pausedUsers || []));
+  var tree = orgOrder(all.concat(state.pausedUsers || []));
+  /* Search: by name, user name, role or gadud / team — including paused users and managers who aren't registered yet; a matching manager brings the people under them. */
+  var list = tree;
+  if (q) {
+    var hit = function (u) { return [u.fullName, u.name, u.id, u.role, u.unit, u.managerName].some(function (x) { return String(x || "").toLowerCase().indexOf(q) !== -1; }); };
+    var hits = {}; tree.forEach(function (u) { if (hit(u)) hits[u.id] = 1; });
+    list = tree.filter(function (u) { return hits[u.id] || hits[u.manager]; }).map(function (u) { return Object.assign({}, u, { _depth: hits[u.id] ? 0 : 1 }); });
+    list = list.filter(function (u) { return u._depth === 0 || list.some(function (m) { return m.id === u.manager; }); });
+  }
   if (!q) USERS_SHOWN = 10000;
   var more = $("usersMore"), hidden = 0;
   more.hidden = true;
