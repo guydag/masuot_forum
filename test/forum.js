@@ -1301,7 +1301,7 @@
     c.appendChild(tx);
     var acts = el("div", "acts");
     /* איזור אש: how many places are left; with room for fewer than 10 it is not offered any more (and nothing is written). */
-    if (p.cap && taken && !mineOnly && room >= 10 && room !== Infinity) tx.appendChild(el("span", "free-t", "נשארו מקומות ל-" + room + " אנשים"));
+    if (p.cap && taken && !mineOnly && room >= 10 && room !== Infinity) tx.appendChild(el("span", "bk-room", "נשארו מקומות ל-" + room + " אנשים"));
     var open = !locked && d >= today() && !mineOnly && (p.cap && taken ? room >= 10 : room > 0);
     if (open) acts.appendChild(btn(taken ? "עוד" : "שריון", (taken ? "ghost" : "primary") + " tiny", function () { Book.form(d, p); }, taken ? "plus" : ""));
     c.appendChild(acts);

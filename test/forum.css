@@ -468,8 +468,9 @@ body.tg-dragging, body.tg-dragging * { cursor: grabbing !important; }
 .bk-a .tx { min-width: 0; padding-top: 1px; }
 .bk-a .tx > b { display: block; font-size: 13px; color: var(--muted); font-weight: 700; }
 .bk-a .free-t { display: block; font-size: 14.5px; color: var(--muted); }
-.bk-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; padding: 2px 0; }
-.bk-txt { font-size: 14.5px; font-weight: 600; overflow-wrap: anywhere; flex: 1 1 100%; }
+.bk-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; padding: 1px 0; min-height: 30px; }
+.bk-txt { font-size: 14.5px; font-weight: 600; overflow-wrap: anywhere; flex: 1 1 auto; min-width: 0; }
+.bk-a .bk-room { display: block; font-size: 12.5px; color: var(--muted); margin-top: 1px; }
 .bk-line em { font-style: normal; color: var(--muted); font-size: 12.5px; }
 .bk-line-acts { display: inline-flex; gap: 2px; margin-inline-start: auto; }
 .bk-confirm { display: inline-flex; gap: 4px; align-items: center; }
