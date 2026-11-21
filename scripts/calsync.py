@@ -596,7 +596,7 @@ def publish_people(db, firestore, users):
         managers, tree = [], {}
         for uid, u in users.items():
             name = u.get("fullName") or u.get("name") or uid.split("@")[0]
-            tree[uid] = {"n": name, "r": u.get("role", ""), "m": u.get("manager", ""), "u": u.get("unit", "")}
+            tree[uid] = {"n": name, "r": u.get("role", ""), "m": u.get("manager", ""), "mn": u.get("managerName", "") if not u.get("manager") else "", "u": u.get("unit", "")}
             if not u.get("paused") and u.get("role") in ("מרכז צעיר", "מרכז בוגר"):
                 managers.append({"id": uid, "name": name, "role": u.get("role")})
         managers.sort(key=lambda x: (x["role"] != "מרכז בוגר", x["name"]))

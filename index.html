@@ -742,7 +742,7 @@ button:focus-visible, summary:focus-visible, .eu-roles input:focus-visible + lab
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<script src="forum.js?v=31"></script>
+<script src="forum.js?v=33"></script>
 <script>
 document.documentElement.lang = "he";
 document.documentElement.dir = "rtl";
@@ -1989,7 +1989,7 @@ function orgOrder(users) {
     if (u.manager && ids[u.manager]) return;
     if (!u.manager && u.managerName) {
       var vid = "name:" + u.managerName;
-      if (!ids[vid]) { ids[vid] = { id: vid, fullName: u.managerName, role: "עדיין לא רשום/ה באתר", virtual: true }; list.push(ids[vid]); }
+      if (!ids[vid]) { ids[vid] = { id: vid, fullName: u.managerName, role: "עדיין לא רשום/ה באתר", virtual: true, manager: ((window.state && state.virtualManagers) || {})[u.managerName] || "" }; list.push(ids[vid]); }
       u.manager = vid;
     } else if (u.manager && !ids[u.manager]) u.manager = "";
   });
@@ -2044,6 +2044,8 @@ async function loadUsers() {
   try {
     var us = await db.collection("users").get();
     var as = await db.collection("admins").get();
+    /* Managers who aren't registered yet can still have a manager of their own (kept by name). */
+    try { var oc = await db.collection("config").doc("org").get(); state.virtualManagers = (oc.exists && oc.data().virtualManagers) || {}; } catch (e) { state.virtualManagers = {}; }
     var admins = {}; as.forEach(function (d) { admins[d.id] = true; });
     var list = [], paused = {}; state.pausedUsers = []; us.forEach(function (d) { var dd = d.data() || {}; if (dd.paused) { paused[d.id] = true; state.pausedUsers.push({ id: d.id, name: dd.name || "", fullName: dd.fullName || "", role: dd.role || "", manager: dd.manager || "", managerName: dd.managerName || "", unit: dd.unit || "", idNumber: dd.idNumber || "", paused: true }); return; } list.push({ id: d.id, name: dd.name || "", fullName: dd.fullName || "", idNumber: dd.idNumber || "", role: dd.role || "", manager: dd.manager || "", managerName: dd.managerName || "", unit: dd.unit || "", admin: !!admins[d.id] }); });
     Object.keys(admins).forEach(function (id) { if (!paused[id] && !list.some(function (x) { return x.id === id; })) list.push({ id: id, name: "", admin: true }); });
