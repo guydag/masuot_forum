@@ -48,7 +48,7 @@
     alert: '<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/>',
     fire: '<path d="M12 22c4 0 7-2.7 7-6.6 0-3.8-3-6.4-4.4-9.4-.6 2.3-1.8 3.6-3 4.2C11.5 7.4 10 4.5 7.6 2.6 7.9 7 5 9.4 5 14.2 5 18.8 8 22 12 22z"/>',
     house: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',
-    bus: '<rect x="3" y="3" width="18" height="15" rx="3"/><path d="M3 11h18M7 21v-3M17 21v-3"/>',
+    bus: '<path d="M12 21.5s-7-6.1-7-11.6a7 7 0 0 1 14 0c0 5.5-7 11.6-7 11.6z"/><circle cx="12" cy="9.8" r="2.6"/>',
     proj: '<rect x="2" y="7" width="20" height="10" rx="2"/><circle cx="8" cy="12" r="2.5"/><path d="M14 11h5M14 14h3"/>',
     share: '<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/>',
     copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',

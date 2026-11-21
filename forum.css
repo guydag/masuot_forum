@@ -606,3 +606,4 @@ button.org-tg:hover { background: color-mix(in srgb, var(--fg) 10%, transparent)
 .fv-logo-a { display: inline-flex; flex: none; border-radius: 50%; -webkit-tap-highlight-color: transparent; }
 .fv-logo-a:active { transform: scale(.94); }
 a.tab-brand { text-decoration: none; color: inherit; }
+.eu-f[hidden] { display: none !important; }

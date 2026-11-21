@@ -214,13 +214,14 @@ var NO_MGR = ["מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מד
 $("unit").addEventListener("change", function () { $("m-unit").textContent = ""; });
 /* צוות הובלה don't have to choose a gadud / team. */
 var LEAD_ROLES = ["מרכז צעיר", "מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריך שכבה"];
-function unitLabel() { var rb = document.querySelector('input[name=role]:checked'), opt = rb && LEAD_ROLES.indexOf(rb.value) !== -1;
-  document.querySelector('label[for=unit]').textContent = opt ? "גדוד / צוות (לא חובה)" : "גדוד / צוות"; if (opt) $("m-unit").textContent = ""; }
+/* צוות הובלה have no gadud / team: the field is not shown to them at all. */
+function unitLabel() { var rb = document.querySelector('input[name=role]:checked'), lead = rb && LEAD_ROLES.indexOf(rb.value) !== -1;
+  $("unitWrap").dataset.lead = lead ? "1" : ""; $("unitWrap").hidden = lead || !UNITS.length; if (lead) { $("unit").value = ""; $("m-unit").textContent = ""; } }
 document.querySelectorAll('input[name=role]').forEach(function (r) { r.addEventListener("change", unitLabel); });
 db.collection("public").doc("units").get().then(function (s) {
   UNITS = (s.exists && s.data().list) || [];
   UNITS.forEach(function (u) { var o = document.createElement("option"); o.value = u; o.textContent = u; $("unit").appendChild(o); });
-  $("unitWrap").hidden = !UNITS.length;
+  $("unitWrap").hidden = !UNITS.length || $("unitWrap").dataset.lead === "1";
 }).catch(function () { $("unitWrap").hidden = true; });
 function syncMgr() { var rb = document.querySelector('input[name=role]:checked'); $("mgrWrap").hidden = !rb || NO_MGR.indexOf(rb.value) !== -1 || !MANAGERS.length; }
 Array.prototype.forEach.call(document.querySelectorAll('input[name=role]'), function (r) { r.addEventListener("change", function () { $("m-mgr").textContent = ""; syncMgr(); }); });
