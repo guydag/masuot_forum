@@ -245,8 +245,12 @@
 
   /* ---------- gadud / team list (kept by managers in the settings) ---------- */
   var Units = F.Units = { list: [] };
+  F.isLead = isLead;
+  /* Everyone outside צוות הובלה belongs to a gadud / team; they see each other's bookings and equipment requests. */
+  F.myUnit = function () { return isLead() ? "" : (me.unit || ""); };
+  F.sameUnit = function (u) { var m = F.myUnit(); return !!m && u === m; };
   Units.ask = function () {
-    if (me.unit || !Units.list.length || document.getElementById("pvOverlay")) return;
+    if (isLead() || me.unit || !Units.list.length || document.getElementById("pvOverlay")) return;
     var body = el("form", "eu-body"); body.noValidate = true;
     body.appendChild(el("p", "f-lead", "כדי שנמלא אותו בשבילך בשריונים ובציוד מרכז."));
     var sel = select([["", "בחירה מהרשימה…"]].concat(Units.list.map(function (u) { return [u, u]; })), "");
@@ -262,6 +266,12 @@
     var foot = el("div", "pv-foot eu-foot"); foot.appendChild(save); foot.appendChild(btn("אחר כך", "ghost small", function () { closePreview(); })); body.appendChild(foot);
     openModal({ title: "מה הגדוד / הצוות שלך?", body: body });
   };
+  /* The gadud / team in a form: filled in by itself; צוות הובלה type it freely. */
+  function unitField(val) {
+    if (isLead()) return input("text", val || "", "לאיזה גדוד / צוות?");
+    if (me.unit && (!val || val === me.unit)) { var d = el("output", "unit-fixed", me.unit); d.value = me.unit; return d; }
+    return unitSelect(val);
+  }
   function unitSelect(val) {
     var opts = [["", "בחירה…"]].concat(Units.list.map(function (u) { return [u, u]; }));
     if (val && Units.list.indexOf(val) === -1) opts.push([val, val]);
@@ -330,7 +340,10 @@
     var set = $("settingsBody");
     if (set) {
       var lo = btn("התנתקות", "ghost small set-logout", function () { location.hash = ""; auth.signOut(); });
-      var ver = set.querySelector("p.version"); set.insertBefore(lo, ver || null);
+      var ver = set.querySelector("p.version"), foot = el("div", "set-foot");
+      var help = ver && ver.previousElementSibling && ver.previousElementSibling.classList.contains("note") ? ver.previousElementSibling : null;
+      set.insertBefore(foot, ver || null);
+      if (help) foot.appendChild(help); foot.appendChild(lo); if (ver) foot.appendChild(ver);
       Settings.box = el("div", "set-extra"); var us = $("usersSection"); set.insertBefore(Settings.box, us ? us.nextSibling : ver);
     }
     /* "new report" markers drive the dot on רשומים */
@@ -565,7 +578,7 @@
   }
   function evChip(e, mode) {
     var c = evColor(e), time = e.allDay || e.cont ? "" : '<span class="ct" dir="ltr">' + hm(e.s) + "</span> ";
-    return '<button class="cv-chip ' + (e.allDay ? "ad" : "tm") + " " + (mode || "") + '" data-act="calev" data-i="' + e.idx + '" style="--cc:' + esc(c) + ";--ci:" + inkOn(c) + '" title="' + esc(e.t) + '"><span>' + time + esc(e.t) + "</span></button>";
+    return '<button class="cv-chip ' + (e.allDay ? "ad" : "tm") + " " + (mode || "") + '" data-act="calev" data-i="' + e.idx + '" style="--cc:' + esc(c) + ";--ci:" + inkOn(c) + '"><span>' + time + esc(e.t) + "</span></button>";
   }
   function spanEvents() {
     var out = [];
@@ -585,7 +598,7 @@
   }
   function barHtml(g) {
     var c = evColor(g.ev);
-    return '<button class="cv-chip ad cv-bar ' + (g.cl ? "cl" : "") + " " + (g.cr ? "cr" : "") + '" data-act="calev" data-i="' + g.idx + '" style="--c0:' + g.c0 + ";--sp:" + g.sp + ";--ln:" + g.ln + ";--cc:" + esc(c) + ";--ci:" + inkOn(c) + '" title="' + esc(g.ev.t) + '"><span>' + esc(g.ev.t) + "</span></button>";
+    return '<button class="cv-chip ad cv-bar ' + (g.cl ? "cl" : "") + " " + (g.cr ? "cr" : "") + '" data-act="calev" data-i="' + g.idx + '" style="--c0:' + g.c0 + ";--sp:" + g.sp + ";--ln:" + g.ln + ";--cc:" + esc(c) + ";--ci:" + inkOn(c) + '"><span>' + esc(g.ev.t) + "</span></button>";
   }
   function calMonth() {
     var first = parse(Cal.st.date); first.setDate(1);
@@ -614,7 +627,7 @@
   function tgTime(e) { var L = function (t) { return '<bdi dir="ltr">' + t + "</bdi>"; }, end = e.m1 < 1440;
     if (!e.cont) return end ? L(hm(e.s) + "–" + hm(e.e)) : "מ־" + L(hm(e.s));
     return end ? "עד " + L(hm(e.e)) : "כל היום"; }
-  function tgHH() { return window.innerWidth <= 600 ? 34 : 42; }
+  function tgHH() { return Cal.hh || (window.innerWidth <= 600 ? 34 : 42); }
   function calTimeGrid(days) {
     var start = Cal.st.view === "week" ? weekStart(Cal.st.date) : Cal.st.date, td = today();
     var ev = calEventsByDay(start, days), HH = tgHH(), ds = [];
@@ -682,21 +695,44 @@
     var isGrid = elx.classList.contains("cv-grid");
     elx.style.height = Math.max(isGrid ? (window.innerWidth <= 600 ? 52 : 70) * (+elx.style.getPropertyValue("--rows") || 5) : 220, h) + "px";
     if (isGrid) fitMonthCells();
+    else {
+      /* week / day: 10:00–22:00 fill the visible height */
+      var want = Math.max(26, Math.floor((elx.clientHeight - 4) / 12));
+      if (Math.abs(want - tgHH()) >= 1 && !calFit.busy) { Cal.hh = want; calFit.busy = true; Cal.st.tgKey = null; Cal.render(true); calFit.busy = false; }
+    }
   }
+  /* Month view: nothing may be cut in half. Bars and chips that don't fit are hidden and counted in "+N" of their day. */
   function fitMonthCells() {
     var mob = window.innerWidth <= 600;
-    Array.prototype.forEach.call(Cal.body.querySelectorAll(".cv-cell"), function (cell) {
-      var box = cell.querySelector(".cv-items"); if (!box) return;
-      var old = box.querySelector(".cv-more"); if (old) old.remove();
-      var chips = Array.prototype.filter.call(box.children, function (c) { return !c.classList.contains("cv-sp"); }); chips.forEach(function (c) { c.hidden = false; });
-      var total = +box.dataset.n || chips.length, shown = chips.length;
-      var fits = function () { return cell.scrollHeight <= cell.clientHeight + 1; };
-      if (fits() && shown === total) return;
-      var more = el("button", "cv-more"); more.type = "button"; more.dataset.act = "calmore"; more.dataset.d = cell.dataset.d; box.appendChild(more);
-      var upd = function () { var n = total - shown; more.textContent = mob ? "+" + n : n === 1 ? "עוד פריט אחד" : "עוד " + n + " פריטים"; };
-      upd();
-      while (shown > 0 && !fits()) { chips[shown - 1].hidden = true; shown--; upd(); }
-      if (shown === total) more.remove();
+    Array.prototype.forEach.call(Cal.body.querySelectorAll(".cv-wk"), function (wk) {
+      var cs = getComputedStyle(wk), bt = parseFloat(cs.getPropertyValue("--bt")) || 29, bl = parseFloat(cs.getPropertyValue("--bl")) || 22;
+      var cells = Array.prototype.slice.call(wk.querySelectorAll(".cv-cell")), bars = Array.prototype.slice.call(wk.querySelectorAll(".cv-bar"));
+      bars.forEach(function (b) { b.hidden = false; });
+      var rowH = wk.clientHeight, moreH = mob ? 14 : 17;
+      var lanesAll = Math.floor((rowH - bt - 3) / bl), lanesMore = Math.max(0, Math.floor((rowH - bt - 3 - moreH) / bl));
+      var depth = cells.map(function (c) { var sp = c.querySelector(".cv-sp"); return sp ? +sp.style.getPropertyValue("--n") || 0 : 0; });
+      var hiddenBars = cells.map(function () { return 0; });
+      var maxDepth = Math.max.apply(null, depth.concat([0]));
+      var lim = maxDepth <= lanesAll ? lanesAll : lanesMore;
+      bars.forEach(function (b) {
+        var ln = +b.style.getPropertyValue("--ln"), c0 = +b.style.getPropertyValue("--c0"), sp = +b.style.getPropertyValue("--sp");
+        if (ln >= lim) { b.hidden = true; for (var k = c0; k < c0 + sp && k < 7; k++) hiddenBars[k]++; }
+      });
+      cells.forEach(function (cell, k) {
+        var box = cell.querySelector(".cv-items"); if (!box) return;
+        var old = box.querySelector(".cv-more"); if (old) old.remove();
+        var spEl = box.querySelector(".cv-sp"); if (spEl) spEl.style.height = "calc(" + Math.min(depth[k], lim) + " * var(--bl) - 2px)";
+        var chips = Array.prototype.filter.call(box.children, function (c) { return !c.classList.contains("cv-sp"); }); chips.forEach(function (c) { c.hidden = false; });
+        var dataN = +box.dataset.n || chips.length, shown = chips.length;
+        var hid = function () { return dataN - shown + hiddenBars[k]; };
+        var fits = function () { return cell.scrollHeight <= cell.clientHeight + 1; };
+        if (fits() && !hid()) return;
+        var more = el("button", "cv-more"); more.type = "button"; more.dataset.act = "calmore"; more.dataset.d = cell.dataset.d; box.appendChild(more);
+        var upd = function () { var n = hid(); more.textContent = mob ? "+" + n : n === 1 ? "עוד פריט אחד" : "עוד " + n + " פריטים"; };
+        upd();
+        while (shown > 0 && !fits()) { chips[shown - 1].hidden = true; shown--; upd(); }
+        if (hid() <= 0) more.remove();
+      });
     });
   }
   function afterCalendarRender() {
@@ -705,7 +741,7 @@
     var st = Cal.st, key = st.view + "|" + (st.view === "week" ? weekStart(st.date) : st.date);
     if (st.tgKey === key && st.tgTop != null) sc.scrollTop = st.tgTop;
     else { var now = new Date(), isToday = (st.view === "day" && st.date === today()) || (st.view === "week" && weekStart(st.date) === weekStart(today()));
-      sc.scrollTop = Math.max(0, ((isToday ? now.getHours() - 1.5 : 7.5)) * tgHH()); st.tgKey = key; }
+      sc.scrollTop = 10 * tgHH(); st.tgKey = key; }
     st.tgTop = sc.scrollTop; sc.onscroll = function () { st.tgTop = sc.scrollTop; };
   }
   function calSlide(dir) {
@@ -1134,7 +1170,7 @@
      Area bookings (שריון מתחמים)
      ====================================================================== */
   var PLACES = [
-    { key: "fire", name: "שטח אש", icon: "fire", needBoger: true, hint: "יש לתאם עם בוגר בהודעה, ולכתוב אותו לאחר התיאום." },
+    { key: "fire", name: "איזור אש", icon: "fire", needBoger: true, cap: 50, hint: "יש לתאם עם בוגר בהודעה, ולכתוב אותו לאחר התיאום. באיזור אש יכולים להיות עד 50 חניכים, או גדוד / צוות אחד אם הוא גדול יותר." },
     { key: "home", name: "פעילות בבית", icon: "house" },
     { key: "out", name: "פעילות מחוץ לשבט", icon: "bus", multi: true, needBoger: true, hint: "צריך אישור הורים בוואטסאפ או בכתב." },
     { key: "proj", name: "מקרן", icon: "proj", noCount: true }
@@ -1153,7 +1189,13 @@
   Book.place = function (k) { return PLACES.filter(function (p) { return p.key === k; })[0] || { key: k, name: k, icon: "flag" }; };
   Book.placeName = function (b) { var p = Book.place(b.area); return p.name + (b.area === "out" && b.fields && b.fields.where ? " · " + b.fields.where : ""); };
   Book.missingBoger = function (b) { return !b.imported && Book.place(b.area).needBoger && !(b.fields && b.fields.boger); };
-  Book.mineMissing = function () { var t = today(); return Book.list.filter(function (b) { return b.uid === me.id && b.date >= t && Book.missingBoger(b); }).length; };
+  /* Mine = what I booked, and what others of my gadud / team booked. */
+  Book.isMine = function (b) { return b.uid === me.id || F.sameUnit(b.fields && b.fields.unit); };
+  Book.mineMissing = function () { var t = today(); return Book.list.filter(function (b) { return Book.isMine(b) && b.date >= t && Book.missingBoger(b); }).length; };
+  /* איזור אש: up to 50 children together, or one gadud / team of any size. */
+  Book.people = function (bs) { return bs.reduce(function (s, b) { return s + (parseInt(b.fields && b.fields.count, 10) || 0); }, 0); };
+  Book.room = function (p, bs) { if (!p.cap) return p.multi || !bs.length ? Infinity : 0; if (!bs.length) return Infinity; return Math.max(0, p.cap - Book.people(bs)); };
+  Book.sort = "near";
   Book.badge = function () { F.badge("book", Book.mineMissing() ? 1 : 0, true); };
   Book.open = function () { if (!Book.built) Book.build(); Book.render(); };
   Book.build = function () {
@@ -1163,7 +1205,10 @@
     Book.xl = iconBtn("excel", "ייצוא לאקסל", function () { Book.export(); }, "icon-btn xl-btn");
     x.appendChild(Book.xl);
     head(v, "שריון מתחמים", x);
-    Book.seg = el("div", "fseg"); v.appendChild(Book.seg);
+    var bar = el("div", "bk-bar"); Book.seg = el("div", "fseg"); bar.appendChild(Book.seg);
+    Book.sortSel = select([["near", "מהקרוב לרחוק"], ["far", "מהרחוק לקרוב"]], Book.sort); Book.sortSel.classList.add("bk-sort"); Book.sortSel.setAttribute("aria-label", "סדר");
+    Book.sortSel.addEventListener("change", function () { Book.sort = Book.sortSel.value; Book.render(); });
+    bar.appendChild(Book.sortSel); v.appendChild(bar);
     Book.body = el("div", "bk-list"); v.appendChild(Book.body);
   };
   Book.limit = function () { return addMonths(today(), 2); };
@@ -1184,7 +1229,7 @@
     if (Book.err) { box.appendChild(el("div", "fv-err", "לא הצלחנו לטעון את השריונים.")); return; }
     var t = today(), lim = Book.limit();
     if (Book.tab === "mine") {
-      var mine = Book.list.filter(function (b) { return b.uid === me.id && b.date >= t; }).sort(function (a, b) { return a.date.localeCompare(b.date); });
+      var mine = Book.list.filter(function (b) { return Book.isMine(b) && b.date >= t; }).sort(function (a, b) { return a.date.localeCompare(b.date); });
       if (!mine.length) box.appendChild(el("p", "fv-empty", "אין לך שריונים קרובים."));
       mine.forEach(function (b) {
         var card = el("section", "bk-day"); card.appendChild(dayHead(b.date, ""));
@@ -1192,10 +1237,11 @@
       });
       return;
     }
+    Book.sortSel.hidden = Book.tab !== "next";
     var set = {};
-    Object.keys(F.activityOnly()).forEach(function (d) { if (d >= t && d <= addMonths(t, 4)) set[d] = true; });
-    Book.list.forEach(function (b) { if (b.date >= t) set[b.date] = true; });
-    var dates = Object.keys(set).sort();
+    Object.keys(F.activityOnly()).forEach(function (d) { if (d >= t && d <= lim) set[d] = true; });
+    Book.list.forEach(function (b) { if (b.date >= t && b.date <= lim) set[b.date] = true; });
+    var dates = Object.keys(set).sort(); if (Book.sort === "far") dates.reverse();
     if (!dates.length) box.appendChild(el("p", "fv-empty", "לא נמצאו פעולות קרובות בלו״ז."));
     dates.forEach(function (d) {
       var locked = d > lim;
@@ -1218,7 +1264,7 @@
     h.appendChild(bx); h.appendChild(tx); return h;
   }
   function placeCell(d, p, bs, locked, mineOnly) {
-    var taken = bs.length > 0, mineAny = bs.some(function (b) { return b.uid === me.id; });
+    var taken = bs.length > 0, mineAny = bs.some(Book.isMine), room = Book.room(p, bs);
     var c = el("div", "bk-a " + (taken ? (mineAny ? "mine taken" : "taken") : "free"));
     var ic = el("span", "ic"); ic.innerHTML = svg(p.icon, 19); c.appendChild(ic);
     var tx = el("div", "tx"); tx.appendChild(el("b", "", p.name));
@@ -1227,7 +1273,7 @@
       var line = el("div", "bk-line");
       var main = el("span", "bk-txt", (p.key === "out" && b.fields && b.fields.where ? b.fields.where + " · " : "") + (b.text || ""));
       line.appendChild(main);
-      var who = b.byName ? "שוריין ע״י " + b.byName : (b.imported ? "מהטבלה הקודמת" : "");
+      var who = b.byName && b.uid !== me.id ? "שוריין ע״י " + b.byName : "";
       if (who) line.appendChild(el("em", "", who));
       if (Book.missingBoger(b)) line.appendChild(el("strong", "miss", "חסר בוגר"));
       var mine = b.uid === me.id;
@@ -1241,7 +1287,8 @@
     });
     c.appendChild(tx);
     var acts = el("div", "acts");
-    var open = !locked && d >= today() && !mineOnly && (!taken || p.multi);
+    if (p.cap && taken && !mineOnly) tx.appendChild(el("span", "free-t", room > 0 ? "נשארו מקומות ל-" + room + " חניכים" : "מלא"));
+    var open = !locked && d >= today() && !mineOnly && room > 0;
     if (open) acts.appendChild(btn(taken ? "עוד" : "שריון", (taken ? "ghost" : "primary") + " tiny", function () { Book.form(d, p); }, taken ? "plus" : ""));
     c.appendChild(acts);
     return c;
@@ -1260,7 +1307,7 @@
     var editing = !!b, vals = (b && b.fields) || {};
     var body = el("form", "eu-body"); body.noValidate = true;
     if (p.hint) body.appendChild(el("div", "fv-info", p.hint));
-    var unit = unitSelect(vals.unit), count = input("number", vals.count || "", "כמה חניכים");
+    var unit = unitField(vals.unit), count = input("number", vals.count || "", "כמה חניכים");
     var row = el("div", "frow"); row.appendChild(field("גדוד / צוות", unit)); if (!p.noCount) row.appendChild(field("כמות חניכים", count)); body.appendChild(row);
     var ex = {};
     if (p.key === "out") {
@@ -1270,7 +1317,7 @@
       ex.other = input("text", vals.place === "other" ? vals.where || "" : "", "שם המקום");
       var otherW = field("לאן בדיוק?", ex.other); otherW.hidden = ex.place.value !== "other";
       ex.place.addEventListener("change", function () { otherW.hidden = ex.place.value !== "other"; if (!otherW.hidden) ex.other.focus(); });
-      var r2 = el("div", "frow"); r2.appendChild(field("לאן יוצאים", ex.place)); r2.appendChild(field("כמות קבוצות", ex.groups = input("number", vals.groups || "", ""))); body.appendChild(r2);
+      body.appendChild(field("לאן יוצאים", ex.place));
       body.appendChild(otherW);
     }
     if (p.needBoger) body.appendChild(field(p.key === "fire" ? "הבוגר שתואם איתו" : "שם הבוגר בשטח", ex.boger = input("text", vals.boger || "", "")));
@@ -1292,17 +1339,25 @@
       e.preventDefault(); err.textContent = "";
       var f = { unit: unit.value, count: p.noCount ? "" : count.value.replace(/\D/g, ""), note: note.value.trim() };
       if (ex.boger) f.boger = ex.boger.value.trim();
-      if (ex.groups) f.groups = ex.groups.value.replace(/\D/g, "");
       if (ex.hours) f.hours = ex.hours.value;
       if (ex.place) { f.place = ex.place.value; f.where = f.place === "other" ? ex.other.value.trim() : GARDENS.filter(function (g) { return g[0] === f.place; })[0][1]; if (!f.where) { err.textContent = "יש לכתוב לאן יוצאים."; return; } }
-      if (!f.unit) { err.textContent = "יש לבחור גדוד / צוות."; return; }
+      if (!f.unit) { err.textContent = F.isLead() ? "יש לכתוב לאיזה גדוד / צוות." : "יש לבחור גדוד / צוות."; return; }
+      if (p.cap) {
+        var others = Book.list.filter(function (x) { return x.date === d && x.area === p.key && x.id !== (b && b.id); });
+        if (others.length) {
+          if (!f.count) { err.textContent = "יש לכתוב כמה חניכים מגיעים."; return; }
+          var free = p.cap - Book.people(others);
+          if (+f.count > free) { err.textContent = free > 0 ? "נשארו מקומות רק ל-" + free + " חניכים באיזור אש בתאריך הזה." : "איזור אש מלא בתאריך הזה."; return; }
+        }
+      }
       if (d > Book.limit()) { err.textContent = "אפשר לשריין רק עד חודשיים קדימה."; return; }
       if (!editing && !can.unlimitedBooking()) {
         var near = Book.mineNear(d);
         if (near.length) { err.textContent = "כבר יש לך שריון ב-" + shortDate(near[0].date) + ". אפשר לשריין פעם אחת בכל חודשיים."; return; }
       }
-      var text = [f.unit, f.count ? f.count + " חניכים" : "", f.groups ? f.groups + " קבוצות" : "", f.hours ? f.hours : "", f.boger ? "בוגר: " + f.boger : "", f.note].filter(Boolean).join(" · ");
-      var id = editing ? b.id : p.key !== "out" ? d + "_" + p.key : f.place !== "other" ? d + "_out_" + f.place : d + "_out_" + Math.random().toString(36).slice(2, 9);
+      var text = [f.unit, f.count ? f.count + " חניכים" : "", f.hours ? f.hours : "", f.boger ? "בוגר: " + f.boger : "", f.note].filter(Boolean).join(" · ");
+      var rnd = Math.random().toString(36).slice(2, 9);
+      var id = editing ? b.id : p.key === "out" ? (f.place !== "other" ? d + "_out_" + f.place : d + "_out_" + rnd) : p.cap && Book.list.some(function (x) { return x.date === d && x.area === p.key; }) ? d + "_" + p.key + "_" + rnd : d + "_" + p.key;
       var ref = db.collection("bookings").doc(id);
       save.disabled = true;
       try {
@@ -1370,7 +1425,10 @@
       F.listen(q.onSnapshot(function (s) { var l = []; s.forEach(function (d) { var x = d.data(); x.id = d.id; l.push(x); }); parts[key] = l; merge(); }, function () { parts[key] = []; merge(); }));
     };
     if (can.seeAllGear()) on("all", db.collection("gear").where("date", ">=", addDays(today(), -45)));
-    else { on("mine", db.collection("gear").where("uid", "==", me.id)); on("appr", db.collection("gear").where("approvers", "array-contains", me.id)); }
+    else {
+      on("mine", db.collection("gear").where("uid", "==", me.id)); on("appr", db.collection("gear").where("approvers", "array-contains", me.id));
+      if (F.myUnit()) on("unit", db.collection("gear").where("unit", "==", F.myUnit()));
+    }
   };
   Gear.changed = function () {
     var a = Gear.attention(); F.badge("gear", a.n, a.dot);
@@ -1426,7 +1484,7 @@
     var t0 = today();
     if (Gear.tab === "shop") return Gear.shop(box);
     var list = Gear.list.filter(function (g) {
-      if (Gear.tab === "mine") return g.uid === me.id && !g.dismissed && g.date >= addDays(t0, -14);
+      if (Gear.tab === "mine") return (g.uid === me.id || F.sameUnit(g.unit)) && !g.dismissed && g.date >= addDays(t0, -14);
       if (Gear.tab === "review") return g.status === "pending" && Gear.canApprove(g) && g.uid !== me.id;
       return true;
     });
@@ -1499,7 +1557,7 @@
     var next = Object.keys(only).filter(function (d) { return d >= t0; }).sort()[0] || "";
     var dp = datePick(g ? g.date : next, { only: only, title: "תאריך הפעולה", ph: "בחירת פעולה מהלו״ז" });
     var dw = el("div", "eu-f"); dw.appendChild(el("span", "eu-lab", "תאריך הפעולה")); dw.appendChild(dp); body.appendChild(dw);
-    var unit = unitSelect(g ? g.unit : ""); body.appendChild(field("גדוד / צוות", unit));
+    var unit = unitField(g ? g.unit : ""); body.appendChild(field("גדוד / צוות", unit));
     var wrap = el("div", "eu-f"); wrap.appendChild(el("span", "eu-lab", "פריטים"));
     var items = el("div", "items-ed"); wrap.appendChild(items);
     function addRow(it, focus) {
@@ -1696,22 +1754,6 @@
     var box = Settings.box; if (!box) return;
     box.textContent = "";
     if (!me.admin) return;
-    // gadud / team list
-    box.appendChild(el("h2", "sec-title grp", "גדודים וצוותים"));
-    var c1 = el("section", "card units-card");
-    c1.appendChild(el("p", "note", "הרשימה שממנה בוחרים בהרשמה, בשריונים ובציוד מרכז."));
-    var chips = el("div", "unit-chips");
-    Units.list.forEach(function (u) {
-      var ch = el("span", "unit-chip"); ch.appendChild(el("span", "", u));
-      ch.appendChild(iconBtn("x", "הסרת " + u, function () { saveUnits(Units.list.filter(function (x) { return x !== u; })); }, "icon-btn sm"));
-      chips.appendChild(ch);
-    });
-    if (!Units.list.length) chips.appendChild(el("p", "muted-empty", "הרשימה ריקה."));
-    c1.appendChild(chips);
-    var add = el("form", "unit-add"); var ui = input("text", "", "גדוד או צוות חדש"); add.appendChild(ui);
-    var ab = el("button", "btn ghost small", "הוספה"); ab.type = "submit"; add.appendChild(ab);
-    add.addEventListener("submit", function (e) { e.preventDefault(); var v = ui.value.trim(); if (!v || Units.list.indexOf(v) !== -1) return; saveUnits(Units.list.concat(v)); });
-    c1.appendChild(add); box.appendChild(c1);
     // category visibility per role
     box.appendChild(el("h2", "sec-title grp", "קטגוריות בלו״ז לפי תפקיד"));
     var c2 = el("section", "card vis-card");
@@ -1720,17 +1762,19 @@
     if (!cats.length) c2.appendChild(el("p", "muted-empty", "הקטגוריות ייטענו עם הלו״ז."));
     else {
       var tw = el("div", "vis-wrap"), tb = el("table", "vis-t"), thead = el("thead");
-      var gr = el("tr"); gr.appendChild(el("th", "", ""));
-      var g1 = el("th", "vis-g", "צוות הובלה"); g1.colSpan = 5; gr.appendChild(g1); var g2 = el("th", "vis-g", "פורום מוביל"); g2.colSpan = 3; gr.appendChild(g2); thead.appendChild(gr);
-      var order = ["מרכז צעיר"].concat(BOGER, ["ראשג״ד", "ראש״צ", "מדריך קורס"]);
-      var hr = el("tr"); hr.appendChild(el("th", "", "קטגוריה")); order.forEach(function (r) { hr.appendChild(el("th", "vis-r", r)); }); thead.appendChild(hr);
+      /* צוות הובלה is one column (all its roles together); the rest of the roles each have their own. */
+      var LEADR = ["מרכז צעיר"].concat(BOGER);
+      var cols = [["צוות הובלה", LEADR], ["ראשג״ד", ["ראשג״ד"]], ["ראש״צ", ["ראש״צ"]], ["מדריך קורס", ["מדריך קורס"]]];
+      var hr = el("tr"); hr.appendChild(el("th", "vis-c0", "קטגוריה")); cols.forEach(function (c) { hr.appendChild(el("th", "vis-r", c[0])); }); thead.appendChild(hr);
       tb.appendChild(thead);
       var tbody = el("tbody");
       cats.forEach(function (c) {
         var tr = el("tr"), th = el("th", "vis-c"); var dot = el("i"); dot.style.background = "#" + c.color; th.appendChild(dot); th.appendChild(document.createTextNode(c.name)); tr.appendChild(th);
-        order.forEach(function (r) {
-          var td = el("td"), cb = el("input"); cb.type = "checkbox"; cb.checked = (vis[r] || []).indexOf(c.name) === -1; cb.setAttribute("aria-label", c.name + " · " + r);
-          cb.addEventListener("change", function () { var h = (vis[r] || []).filter(function (x) { return x !== c.name; }); if (!cb.checked) h.push(c.name); vis[r] = h; saveVis(vis); });
+        cols.forEach(function (col) {
+          var td = el("td"), cb = el("input"); cb.type = "checkbox";
+          cb.checked = col[1].every(function (r) { return (vis[r] || []).indexOf(c.name) === -1; });
+          cb.setAttribute("aria-label", c.name + " · " + col[0]);
+          cb.addEventListener("change", function () { col[1].forEach(function (r) { var h = (vis[r] || []).filter(function (x) { return x !== c.name; }); if (!cb.checked) h.push(c.name); vis[r] = h; }); saveVis(vis); });
           td.appendChild(cb); tr.appendChild(td);
         });
         tbody.appendChild(tr);
@@ -1739,7 +1783,6 @@
     }
     box.appendChild(c2);
   };
-  async function saveUnits(list) { try { await db.collection("public").doc("units").set({ list: list }); } catch (e) { toast("השמירה לא הצליחה", true); } }
   var visT = null;
   function saveVis(vis) { clearTimeout(visT); visT = setTimeout(async function () { try { await db.collection("config").doc("calendar").set({ hidden: vis }, { merge: true }); toast("נשמר. הלו״ז יתעדכן אצל כולם תוך כמה שניות"); } catch (e) { toast("השמירה לא הצליחה", true); } }, 400); }
 

@@ -195,7 +195,7 @@ $("f").addEventListener("submit", async function (ev) {
   if (!/^[a-z]{3,20}$/.test(first)) ok = fail("first", "שם משתמש: 3 עד 20 אותיות באנגלית, בלי רווחים וספרות.") && ok;
   if (!rb) { $("m-role").textContent = "נא לבחור תפקיד."; ok = false; }
   var needMgr = rb && NO_MGR.indexOf(rb.value) === -1, mgr = $("mgr").value;
-  if (UNITS.length && !$("unit").value) { $("m-unit").textContent = "נא לבחור גדוד / צוות."; ok = false; }
+  if (UNITS.length && !$("unit").value && !(rb && LEAD_ROLES.indexOf(rb.value) !== -1)) { $("m-unit").textContent = "נא לבחור גדוד / צוות."; ok = false; }
   if (needMgr && !mgr && MANAGERS.length) { $("m-mgr").textContent = "נא לבחור אחראי/ת ישיר/ה."; ok = false; }
   if (!ok || document.querySelector(".msg:not(:empty)")) return;
   var btn = $("go"); btn.disabled = true; $("goTxt").textContent = "שולח…";
@@ -212,6 +212,11 @@ $("f").addEventListener("submit", async function (ev) {
 /* Direct manager: alumni have none; everyone else picks one from a public list kept up to date by the sync job. */
 var NO_MGR = ["מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריכת שכבה", "בוגר"], MANAGERS = [], UNITS = [];
 $("unit").addEventListener("change", function () { $("m-unit").textContent = ""; });
+/* צוות הובלה don't have to choose a gadud / team. */
+var LEAD_ROLES = ["מרכז צעיר", "מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריכת שכבה"];
+function unitLabel() { var rb = document.querySelector('input[name=role]:checked'), opt = rb && LEAD_ROLES.indexOf(rb.value) !== -1;
+  document.querySelector('label[for=unit]').textContent = opt ? "גדוד / צוות (לא חובה)" : "גדוד / צוות"; if (opt) $("m-unit").textContent = ""; }
+document.querySelectorAll('input[name=role]').forEach(function (r) { r.addEventListener("change", unitLabel); });
 db.collection("public").doc("units").get().then(function (s) {
   UNITS = (s.exists && s.data().list) || [];
   UNITS.forEach(function (u) { var o = document.createElement("option"); o.value = u; o.textContent = u; $("unit").appendChild(o); });
