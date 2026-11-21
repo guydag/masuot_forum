@@ -586,7 +586,7 @@ def drive_upload(s, data):
 
 
 ROLE_KEY = {"מדריך קורס": "course", "ראשג״ד": "rashgad", "ראש״צ": "rashatz", "מרכז צעיר": "young", "מרכז בוגר": "senior",
-            "דרג מתנדב": "volunteer", "מלווה ט׳": "escort", "מדריכת שכבה": "layer"}
+            "דרג מתנדב": "volunteer", "מלווה ט׳": "escort", "מדריך שכבה": "layer"}
 
 
 def publish_people(db, firestore, users):
