@@ -7,7 +7,7 @@ function fmRole() {
 }
 function fmAdmin() { return exists(/databases/$(database)/documents/admins/$(fmEmail())); }
 function fmYoung() { return fmRole() == "מרכז צעיר"; }
-function fmBoger() { return fmRole() in ["מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריכת שכבה"]; }
+function fmBoger() { return fmRole() in ["מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריך שכבה"]; }
 function fmEditor() { return fmAdmin() || fmYoung() || fmBoger(); }
 
 // Calendar: written only by the sync job; changes from the site go through cal_ops.

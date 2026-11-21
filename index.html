@@ -742,7 +742,7 @@ button:focus-visible, summary:focus-visible, .eu-roles input:focus-visible + lab
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<script src="forum.js?v=35"></script>
+<script src="forum.js?v=36"></script>
 <script>
 document.documentElement.lang = "he";
 document.documentElement.dir = "rtl";
@@ -2251,10 +2251,10 @@ document.addEventListener("click", function (e) {
 $("usersSearch").addEventListener("input", function () { state.usersPage = 0; renderUsers(); });
 
 $("usersMore").addEventListener("click", function () { state.usersAll = !state.usersAll; renderUsers(); });
-var ROLES = window.Forum ? Forum.ROLES : ["מדריך קורס", "ראשג״ד", "ראש״צ", "מרכז צעיר", "מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריכת שכבה"];
+var ROLES = window.Forum ? Forum.ROLES : ["מדריך קורס", "ראשג״ד", "ראש״צ", "מרכז צעיר", "מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריך שכבה"];
 /* Org tree: every user except alumni has a direct manager, chosen from the young coordinators and the senior coordinator (מרכז בוגר). */
-var NO_MANAGER_ROLES = ["בוגר", "מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריכת שכבה"];
-var NO_REPORTS_ROLES = ["דרג מתנדב", "מלווה ט׳", "מדריכת שכבה"];
+var NO_MANAGER_ROLES = ["בוגר", "מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריך שכבה"];
+var NO_REPORTS_ROLES = ["דרג מתנדב", "מלווה ט׳", "מדריך שכבה"];
 var MANAGER_ROLES = ["מרכז צעיר", "מרכז בוגר"];
 function canBeManager(u) { return MANAGER_ROLES.indexOf(u.role || "") !== -1; }
 function userName(id) { var u = (state.users || []).filter(function (x) { return x.id === id; })[0]; return u ? (u.fullName || u.name || shortId(id)) : (id ? shortId(id) : ""); }

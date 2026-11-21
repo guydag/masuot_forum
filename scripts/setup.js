@@ -1,5 +1,5 @@
 /* One-time setup for "פורום מוביל". Run from GitHub: Actions › "Set up פורום מוביל" › Run workflow.
-   1. Renames roles: מרכז -> מרכז צעיר; בוגר -> מרכז בוגר (ליאור), דרג מתנדב (אדוה), מלווה ט (גיא), מדריכת שכבה (everyone else).
+   1. Renames roles: מרכז -> מרכז צעיר; בוגר -> מרכז בוגר (ליאור), דרג מתנדב (אדוה), מלווה ט (גיא), מדריך שכבה (everyone else).
    2. Copies the existing area bookings (scripts/bookings-import.json) into Firestore, skipping any that already exist.
    With APPLY=false it only prints what it would do. */
 const admin = require("firebase-admin");
@@ -13,7 +13,7 @@ function newRole(d) {
   if (d.role === "מרכז") return "מרכז צעיר";
   if (d.role !== "בוגר") return null;
   const first = String(d.name || d.fullName || "").trim().split(/\s+/)[0];
-  return BY_NAME[first] || "מדריכת שכבה";
+  return BY_NAME[first] || "מדריך שכבה";
 }
 async function roles(col) {
   const snap = await db.collection(col).get();
