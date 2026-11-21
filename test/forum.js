@@ -1282,6 +1282,7 @@
     h.appendChild(bx); h.appendChild(tx); return h;
   }
   function placeCell(d, p, bs, locked, mineOnly) {
+    var single = null;
     var taken = bs.length > 0, mineAny = bs.some(Book.isMine), room = Book.room(p, bs);
     var c = el("div", "bk-a " + (taken ? (mineAny ? "mine taken" : "taken") : "free"));
     var ic = el("span", "ic"); ic.innerHTML = svg(p.icon, 19); c.appendChild(ic);
@@ -1299,7 +1300,8 @@
         var la = el("span", "bk-line-acts");
         if (mine) la.appendChild(iconBtn("pen", "עריכה", function () { Book.form(b.date, p, b); }, "icon-btn sm"));
         la.appendChild(iconBtn("trash", "ביטול השריון", function () { Book.cancel(b, line); }, "icon-btn sm"));
-        line.appendChild(la);
+        /* One booking: its edit / delete sit under the button on the side. Several: next to each one. */
+        if (bs.length === 1) single = la; else line.appendChild(la);
       }
       tx.appendChild(line);
     });
@@ -1309,6 +1311,7 @@
     if (p.cap && taken && !mineOnly && room >= 10 && room !== Infinity) tx.appendChild(el("span", "bk-room", "נשארו מקומות ל-" + room + " אנשים"));
     var open = !locked && d >= today() && !mineOnly && (p.cap && taken ? room >= 10 : room > 0);
     if (open) acts.appendChild(btn(taken ? "עוד" : "שריון", (taken ? "ghost" : "primary") + " tiny", function () { Book.form(d, p); }, taken ? "plus" : ""));
+    if (single) acts.appendChild(single);
     c.appendChild(acts);
     return c;
   }

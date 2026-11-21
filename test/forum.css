@@ -472,11 +472,12 @@ body.tg-dragging, body.tg-dragging * { cursor: grabbing !important; }
 .bk-txt { font-size: 14.5px; font-weight: 600; overflow-wrap: anywhere; flex: 1 1 auto; min-width: 0; }
 .bk-a .bk-room { display: block; font-size: 12.5px; color: var(--muted); margin-top: 1px; }
 .bk-line em { font-style: normal; color: var(--muted); font-size: 12.5px; }
-.bk-line-acts { display: inline-flex; gap: 2px; margin-inline-start: auto; }
+.bk-line-acts { display: inline-flex; gap: 2px; }
+.bk-a .acts .bk-line-acts { justify-content: center; }
 .bk-confirm { display: inline-flex; gap: 4px; align-items: center; }
 .bk-a.taken .ic { background: var(--accent-soft); color: var(--accent); }
 .bk-a.mine .ic { background: var(--accent); color: #fff; }
-.bk-a .acts { display: flex; align-items: center; min-width: 70px; justify-content: flex-end; padding-top: 2px; }
+.bk-a .acts { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 70px; padding-top: 2px; }
 .bk-a .acts .btn { min-width: 64px; justify-content: center; }
 
 /* ---------- equipment ---------- */
