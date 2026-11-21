@@ -1322,7 +1322,7 @@
     var body = el("form", "eu-body"); body.noValidate = true;
     if (p.hint) body.appendChild(el("div", "fv-info", p.hint));
     var unit = unitField(vals.unit), count = input("number", vals.count || "", "כמה אנשים");
-    var row = el("div", "frow"); row.appendChild(field("גדוד / צוות", unit)); if (!p.noCount) row.appendChild(field("כמות אנשים", count)); body.appendChild(row);
+    var row = el("div", "frow"); row.appendChild(field("למי?", unit)); if (!p.noCount) row.appendChild(field("כמות אנשים", count)); body.appendChild(row);
     var ex = {};
     if (p.key === "out") {
       var takenG = {}; Book.list.forEach(function (x) { if (x.date === d && x.area === "out" && x.fields && x.id !== (b && b.id)) takenG[x.fields.place] = 1; });
@@ -1571,7 +1571,7 @@
     var next = Object.keys(only).filter(function (d) { return d >= t0; }).sort()[0] || "";
     var dp = datePick(g ? g.date : next, { only: only, title: "תאריך הפעולה", ph: "בחירת פעולה מהלו״ז" });
     var dw = el("div", "eu-f"); dw.appendChild(el("span", "eu-lab", "תאריך הפעולה")); dw.appendChild(dp); body.appendChild(dw);
-    var unit = unitField(g ? g.unit : ""); body.appendChild(field("גדוד / צוות", unit));
+    var unit = unitField(g ? g.unit : ""); body.appendChild(field("למי?", unit));
     var wrap = el("div", "eu-f"); wrap.appendChild(el("span", "eu-lab", "פריטים"));
     var items = el("div", "items-ed"); wrap.appendChild(items);
     function addRow(it, focus) {
