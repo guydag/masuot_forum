@@ -601,3 +601,4 @@ button.org-tg:hover { background: color-mix(in srgb, var(--fg) 10%, transparent)
 .org-tg svg { transition: transform .2s; }
 .org-tg.open svg { transform: rotate(-90deg); }
 .org-tg b { font-weight: 700; }
+.user-row.tree-row { grid-template-columns: 40px 44px minmax(0, 1fr) 36px; }
