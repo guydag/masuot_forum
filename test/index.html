@@ -39,7 +39,7 @@
 <meta name="application-name" content="פורום מוביל">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <meta name="theme-color" content="#fffaf3">
-<link rel="stylesheet" href="forum.css?v=28">
+<link rel="stylesheet" href="forum.css?v=30">
 <script>
 /* Set the theme before the page paints so a dark choice never flashes light first. */
 (function () {
@@ -2143,6 +2143,14 @@ function renderUsers() {
     list = tree.filter(function (u) { return hits[u.id] || hits[u.manager]; }).map(function (u) { return Object.assign({}, u, { _depth: hits[u.id] ? 0 : 1 }); });
     list = list.filter(function (u) { return u._depth === 0 || list.some(function (m) { return m.id === u.manager; }); });
   }
+  /* The tree opens folded: only the top of it shows, and each manager opens to show the people under them. */
+  var kidsN = {};
+  if (!q) {
+    state.orgOpen = state.orgOpen || {};
+    tree.forEach(function (u) { if (u.manager) kidsN[u.manager] = (kidsN[u.manager] || 0) + 1; });
+    var byId = {}; tree.forEach(function (u) { byId[u.id] = u; });
+    list = tree.filter(function (u) { var m = u.manager; while (m) { if (!state.orgOpen[m]) return false; m = byId[m] ? byId[m].manager : ""; } return true; });
+  }
   if (!q) USERS_SHOWN = 10000;
   var more = $("usersMore"), hidden = 0;
   more.hidden = true;
@@ -2162,6 +2170,16 @@ function renderUsers() {
     var self = u.id === me;
     var row = document.createElement("div"); row.className = "user-row" + (q ? "" : " tree-row") + (u.virtual ? " virtual" : "");
     if (!q && u._depth) row.style.paddingInlineStart = (u._depth * 26) + "px";
+    if (!q) {
+      var tg = document.createElement(kidsN[u.id] ? "button" : "span"); tg.className = "org-tg" + (state.orgOpen[u.id] ? " open" : "");
+      if (kidsN[u.id]) {
+        tg.type = "button"; tg.setAttribute("aria-expanded", state.orgOpen[u.id] ? "true" : "false");
+        tg.setAttribute("aria-label", (state.orgOpen[u.id] ? "צמצום " : "הצגת ") + kidsN[u.id] + " שתחת " + (u.fullName || u.name || ""));
+        tg.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><b>' + kidsN[u.id] + "</b>";
+        tg.addEventListener("click", function (ev) { ev.stopPropagation(); state.orgOpen[u.id] = !state.orgOpen[u.id]; renderUsers(); });
+      }
+      row.appendChild(tg);
+    }
     var av = document.createElement("div"); av.className = "u-av" + (u.admin ? " admin" : ""); av.setAttribute("aria-hidden", "true");
     var nameParts = (u.fullName || u.name || shortId(u.id)).trim().split(/\s+/);
     av.textContent = (nameParts[0].charAt(0) + (nameParts.length > 1 ? nameParts[1].charAt(0) : "")).toUpperCase();
