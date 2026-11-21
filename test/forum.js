@@ -1173,7 +1173,7 @@
      Area bookings (שריון מתחמים)
      ====================================================================== */
   var PLACES = [
-    { key: "fire", name: "איזור אש", icon: "fire", needBoger: true, cap: 50, hint: "יש לתאם עם בוגר בהודעה, ולכתוב אותו לאחר התיאום. באיזור אש יכולים להיות עד 50 אנשים, או גדוד / צוות אחד אם הוא גדול יותר." },
+    { key: "fire", name: "איזור אש", icon: "fire", needBoger: true, cap: 50, hint: "יש לתאם עם בוגר בהודעה, ולכתוב אותו לאחר התיאום." },
     { key: "home", name: "פעילות בבית", icon: "house" },
     { key: "out", name: "פעילות מחוץ לשבט", icon: "bus", multi: true, needBoger: true, hint: "צריך אישור הורים בוואטסאפ או בכתב." },
     { key: "proj", name: "מקרן", icon: "proj", noCount: true }
@@ -1290,7 +1290,6 @@
     });
     c.appendChild(tx);
     var acts = el("div", "acts");
-    if (p.cap && taken && !mineOnly) tx.appendChild(el("span", "free-t", room > 0 ? "נשארו מקומות ל-" + room + " אנשים" : "מלא"));
     var open = !locked && d >= today() && !mineOnly && room > 0;
     if (open) acts.appendChild(btn(taken ? "עוד" : "שריון", (taken ? "ghost" : "primary") + " tiny", function () { Book.form(d, p); }, taken ? "plus" : ""));
     c.appendChild(acts);
