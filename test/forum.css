@@ -51,8 +51,8 @@ body.signed .tabbar { display: flex; }
 .set-foot .set-logout { align-self: center; min-width: 160px; }
 .unit-fixed { display: flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); font-weight: 700; }
 .bk-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.bk-sort { width: auto; min-height: 38px; padding: 0 12px; border-radius: 10px; font-size: 14px; }
-.bk-sort[hidden] { display: none; }
+.bk-bar .bk-sort { width: auto; flex: none; min-height: 38px; padding: 0 12px; border-radius: 10px; font-size: 14px; }
+.bk-bar .bk-sort[hidden] { display: none; }
 body.signed { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
 body.signed[data-area] { padding-top: 18px; }
 @media (min-width: 900px) {

@@ -997,6 +997,9 @@
     if (!c2) { var bd = 1e9; cells.forEach(function (k) { var r = k.getBoundingClientRect(), dd = Math.min(Math.abs(x - r.left), Math.abs(x - r.right)); if (dd < bd) { bd = dd; c2 = k; } }); }
     return c2 ? c2.dataset.d : null;
   }
+  function buzz() { if (navigator.vibrate) try { navigator.vibrate(12); } catch (_) {} }
+  /* A long press must not open the phone's own menu. */
+  document.addEventListener("contextmenu", function (e) { if (e.target.closest && e.target.closest(".cv-body .cv-chip, .cv-body .cv-bar, .cv-body .tg-ev")) e.preventDefault(); });
   function ddSource(t) {
     if (!t || !t.closest) return null;
     var m = t.closest(".cv-month .cv-chip[data-act='calev'], .cv-month .cv-bar"); if (m) return [m, "month"];
@@ -1056,12 +1059,12 @@
     if (!DD.active) return; e.preventDefault(); ddMove(e.clientX, e.clientY); });
   document.addEventListener("mouseup", function () { if (DD.touch) return; DD.pend = null; if (DD.active) ddEnd(true); });
   document.addEventListener("touchstart", function (e) {
-    if (e.touches.length !== 1 || DD.active || MV.active) return; var s = ddSource(e.target); if (!s || s[1] !== "row" || !ddEvent(s[0])) return;
-    var t = e.touches[0], tgt = e.target; DD.touch = true; DD.pend = s[0]; DD.pendMode = "row"; DD.x0 = t.clientX; DD.y0 = t.clientY; clearTimeout(DD.timer);
+    if (e.touches.length !== 1 || DD.active || MV.active) return; var s = ddSource(e.target); if (!s || !ddEvent(s[0])) return;
+    var t = e.touches[0], tgt = e.target; DD.touch = true; DD.pend = s[0]; DD.pendMode = s[1]; DD.x0 = t.clientX; DD.y0 = t.clientY; clearTimeout(DD.timer);
     var tm = function (ev) { var p = ev.touches[0]; if (!DD.active) { if (Math.abs(p.clientX - DD.x0) > 8 || Math.abs(p.clientY - DD.y0) > 8) { clearTimeout(DD.timer); DD.pend = null; } return; } ev.preventDefault(); ddMove(p.clientX, p.clientY); };
     var te = function (ev) { clearTimeout(DD.timer); tgt.removeEventListener("touchmove", tm); tgt.removeEventListener("touchend", te); tgt.removeEventListener("touchcancel", te); DD.pend = null; if (DD.active) { if (ev.cancelable) ev.preventDefault(); ddEnd(ev.type === "touchend"); } DD.touch = false; };
     tgt.addEventListener("touchmove", tm, { passive: false }); tgt.addEventListener("touchend", te); tgt.addEventListener("touchcancel", te);
-    DD.timer = setTimeout(function () { if (DD.pend) { var b = DD.pend; DD.pend = null; ddStart(b, "row", DD.x0, DD.y0); } }, 420);
+    DD.timer = setTimeout(function () { if (DD.pend) { var b = DD.pend; DD.pend = null; ddStart(b, DD.pendMode, DD.x0, DD.y0); if (DD.active) buzz(); } }, 420);
   }, { passive: true });
 
   /* ---- week / day: drag a timed event to move it; holding at the side edge moves to the next / previous week or day ---- */
@@ -1137,7 +1140,7 @@
     var tm = function (ev) { var p = ev.touches[0]; if (!MV.active) { if (Math.abs(p.clientX - MV.x0) > 8 || Math.abs(p.clientY - MV.y0) > 8) { clearTimeout(MV.timer); MV.pend = null; } return; } ev.preventDefault(); mvMove(p.clientX, p.clientY); };
     var te = function (ev) { clearTimeout(MV.timer); tgt.removeEventListener("touchmove", tm); tgt.removeEventListener("touchend", te); tgt.removeEventListener("touchcancel", te); MV.pend = null; if (MV.active) { if (ev.cancelable) ev.preventDefault(); mvEnd(ev.type === "touchend"); } MV.touch = false; };
     tgt.addEventListener("touchmove", tm, { passive: false }); tgt.addEventListener("touchend", te); tgt.addEventListener("touchcancel", te);
-    MV.timer = setTimeout(function () { if (MV.pend) { var bb = MV.pend; MV.pend = null; mvStart(bb, MV.x0, MV.y0); } }, 420);
+    MV.timer = setTimeout(function () { if (MV.pend) { var bb = MV.pend; MV.pend = null; mvStart(bb, MV.x0, MV.y0); if (MV.active) buzz(); } }, 420);
   }, { passive: true });
 
   /* ---- the calendar at a glance, for the home page (like the iOS widget) ---- */
