@@ -135,7 +135,7 @@ label.l small { font-weight:500; color: var(--muted); margin-inline-start:6px; }
         <input type="radio" name="role" id="r5" value="מרכז בוגר"><label for="r5">מרכז בוגר</label>
         <input type="radio" name="role" id="r6" value="דרג מתנדב"><label for="r6">דרג מתנדב</label>
         <input type="radio" name="role" id="r7" value="מלווה ט׳"><label for="r7">מלווה ט׳</label>
-        <input type="radio" name="role" id="r8" value="מדריכת שכבה"><label for="r8">מדריכת שכבה</label>
+        <input type="radio" name="role" id="r8" value="מדריך שכבה"><label for="r8">מדריך שכבה</label>
       </div>
       <div class="msg" id="m-role"></div>
       <div id="unitWrap" style="margin-top:14px">
@@ -210,10 +210,10 @@ $("f").addEventListener("submit", async function (ev) {
 });
 
 /* Direct manager: alumni have none; everyone else picks one from a public list kept up to date by the sync job. */
-var NO_MGR = ["מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריכת שכבה", "בוגר"], MANAGERS = [], UNITS = [];
+var NO_MGR = ["מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריך שכבה", "בוגר"], MANAGERS = [], UNITS = [];
 $("unit").addEventListener("change", function () { $("m-unit").textContent = ""; });
 /* צוות הובלה don't have to choose a gadud / team. */
-var LEAD_ROLES = ["מרכז צעיר", "מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריכת שכבה"];
+var LEAD_ROLES = ["מרכז צעיר", "מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריך שכבה"];
 function unitLabel() { var rb = document.querySelector('input[name=role]:checked'), opt = rb && LEAD_ROLES.indexOf(rb.value) !== -1;
   document.querySelector('label[for=unit]').textContent = opt ? "גדוד / צוות (לא חובה)" : "גדוד / צוות"; if (opt) $("m-unit").textContent = ""; }
 document.querySelectorAll('input[name=role]').forEach(function (r) { r.addEventListener("change", unitLabel); });
