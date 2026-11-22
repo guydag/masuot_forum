@@ -688,6 +688,43 @@ class Sync:
             self.written[key] = sig
         return len(evs)
 
+    def claim(self, ops):
+        """Take the waiting changes for this run: each becomes "working", so the site no longer changes or cancels it
+        while it is written to the Excel. Returns the changes as they are now."""
+        fs, db, out = self.fs, self.db, []
+        for o in ops:
+            ref = db.collection("cal_ops").document(o["id"])
+
+            @fs.transactional
+            def take(tx, ref=ref):
+                snap = ref.get(transaction=tx)
+                if not snap.exists or (snap.to_dict() or {}).get("state") != "pending":
+                    return None
+                tx.update(ref, {"state": "working"})
+                d = snap.to_dict()
+                d["id"] = ref.id
+                return d
+            try:
+                d = take(db.transaction())
+            except Exception as e:
+                print("Could not take a change:", e)
+                d = None
+            if d:
+                out.append(d)
+        return out
+
+    def release(self, ops):
+        for o in ops:
+            try:
+                self.db.collection("cal_ops").document(o["id"]).update({"state": "pending"})
+            except Exception:
+                pass
+
+    def release_stuck(self):
+        """Changes left "working" by a run that stopped in the middle go back to waiting."""
+        for d in self.db.collection("cal_ops").where("state", "==", "working").stream():
+            d.reference.update({"state": "pending"})
+
     def once(self, ops=None, reload=True):
         """Apply waiting changes to the Excel, then store the events. Returns False if Drive can't be reached."""
         fs, db, s = self.fs, self.db, self.s
@@ -704,18 +741,26 @@ class Sync:
             self.book = Book(drive_download(s))
         book = self.book
         if ops:
-            results = apply_ops(book, ops)
-            if book.changed:
-                # Upload only if the file did not change in Drive since we read it.
-                now = drive_meta(s)
-                if now.get("headRevisionId") != meta.get("headRevisionId") or now.get("modifiedTime") != meta.get("modifiedTime"):
-                    print("The file changed in Drive while syncing; trying again in a moment.")
-                    self.book = None
-                    return True
-                new_bytes = book.save()
-                drive_upload(s, new_bytes)
-                book = self.book = Book(new_bytes)
-                meta = drive_meta(s)
+            ops = self.claim(ops)
+        if ops:
+            try:
+                results = apply_ops(book, ops)
+                if book.changed:
+                    # Upload only if the file did not change in Drive since we read it.
+                    now = drive_meta(s)
+                    if now.get("headRevisionId") != meta.get("headRevisionId") or now.get("modifiedTime") != meta.get("modifiedTime"):
+                        print("The file changed in Drive while syncing; trying again in a moment.")
+                        self.book = None
+                        self.release(ops)
+                        return True
+                    new_bytes = book.save()
+                    drive_upload(s, new_bytes)
+                    book = self.book = Book(new_bytes)
+                    meta = drive_meta(s)
+            except Exception:
+                self.book = None
+                self.release(ops)
+                raise
             for o in ops:
                 r = results.get(o["id"], {"ok": False, "error": "לא טופל"})
                 db.collection("cal_ops").document(o["id"]).set(
@@ -807,6 +852,7 @@ class Sync:
              self.db.collection("users").on_snapshot(on_users),
              self.db.collection("gear").where("push", "==", "todo").on_snapshot(on_gear)]
         time.sleep(3)
+        self.release_stuck()
         self.once()
         end = time.time() + minutes * 60
         last_drive = time.time()
