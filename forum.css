@@ -610,3 +610,5 @@ button.org-tg:hover { background: color-mix(in srgb, var(--fg) 10%, transparent)
 .fv-logo-a:active { transform: scale(.94); }
 a.tab-brand { text-decoration: none; color: inherit; }
 .eu-f[hidden] { display: none !important; }
+/* Month view: the new event being dragged across days */
+.cv-bar.mc-prev { --cc: #7c87c9; --ci: #fff; background: #7c87c9; color: #fff; box-shadow: 0 4px 12px rgba(60,60,120,.3); pointer-events: none; z-index: 3; }
