@@ -616,3 +616,15 @@ a.tab-brand { text-decoration: none; color: inherit; }
 body.drag-out .dd-ghost, body.drag-out .mv-box, body.drag-out .tg-sel, body.drag-out .mc-prev { opacity: .28 !important; }
 body.drag-out .dd-on { background: none !important; box-shadow: none !important; outline: none !important; }
 body.drag-out { cursor: not-allowed; }
+.ins-prices { grid-column: 1 / -1; }
+.ins-plist { max-height: 340px; overflow-y: auto; margin-inline: -4px; padding-inline: 4px; }
+.ins-prow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 84px; gap: 10px; align-items: center; padding: 6px 0; font-size: 13.5px; border-bottom: 1px solid var(--line); }
+.ins-prow:last-child { border-bottom: 0; }
+.ins-prow .l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.ins-prow .src { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ins-prow .src a { color: var(--accent); text-decoration: none; }
+.ins-prow .src a:hover { text-decoration: underline; }
+.ins-pv { justify-self: end; font: inherit; font-weight: 700; background: none; border: 1px solid transparent; border-radius: 8px; padding: 4px 8px; cursor: pointer; color: var(--text); }
+.ins-pv:hover { background: var(--bg); border-color: var(--line); }
+.ins-pin { width: 84px; font: inherit; padding: 4px 8px; border: 1px solid var(--accent); border-radius: 8px; text-align: left; }
+.ins-phint { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; }

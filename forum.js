@@ -1947,7 +1947,11 @@
     [/בלון|בלונים/, 0.5], [/צבע/, 15], [/מכחול/, 4], [/ספוג/, 3], [/כפפ/, 1], [/אוהל/, 150], [/ברזנט|יריעה/, 40], [/יתד/, 2],
     [/כדור/, 25], [/קונוס|קונוסים/, 5], [/משרוקית/, 8], [/דגל/, 15], [/אזיק|סוגר/, 0.5], [/מספריים/, 10], [/סכין/, 12], [/מחבת|סיר/, 50]
   ];
-  function price(it) { var n = String(it.name || ""); for (var i = 0; i < PRICES.length; i++) if (PRICES[i][0].test(n)) return PRICES[i][1] * (+it.qty || 1); return null; }
+  /* Prices found by the sync (Google search through Gemini) or set by a manager are kept in config/prices; the table above is only a fallback. */
+  var FOUND = {};
+  function pkey(n) { return String(n || "").replace(/\s+/g, " ").trim().toLowerCase().replace(/[.~*\/\[\]`]/g, "-").slice(0, 120); }
+  function unitPrice(n) { var f = FOUND[pkey(n)]; if (f && f.price != null) return { p: +f.price, f: f }; n = String(n || ""); for (var i = 0; i < PRICES.length; i++) if (PRICES[i][0].test(n)) return { p: PRICES[i][1], est: true }; return null; }
+  function price(it) { var u = unitPrice(it.name); return u ? u.p * (+it.qty || 1) : null; }
   var Ins = F.Ins = {};
   Ins.open = async function () {
     var v = Ins.view; v.textContent = "";
@@ -1961,8 +1965,10 @@
         db.collection("bookings").get(),
         db.collection("gear").get(),
         db.collection("cal_ops").get(),
-        db.collection("users").get()
+        db.collection("users").get(),
+        db.collection("config").doc("prices").get().catch(function () { return null; })
       ]);
+      FOUND = (res[5] && res[5].exists && res[5].data().items) || {};
       var usage = [], books = [], gear = [], ops = [], users = {};
       res[0].forEach(function (d) { usage.push(d.data()); });
       res[1].forEach(function (d) { books.push(d.data()); });
@@ -2013,6 +2019,7 @@
     grid.appendChild(bars("מי מבקש הכי הרבה ציוד (עלות משוערת)", Object.keys(countBy).map(function (id) { return [nm(id) + " · " + countBy[id] + " בקשות", Math.round(costBy[id] || 0)]; }), 8, "₪"));
     grid.appendChild(bars("עלות משוערת לפי גדוד / צוות", Object.keys(unitCost).map(function (a) { return [a, Math.round(unitCost[a])]; }), 8, "₪"));
     grid.appendChild(bars("הפריטים המבוקשים ביותר", Object.keys(items).map(function (a) { return [a, items[a]]; }), 10));
+    grid.appendChild(priceList(items));
     grid.appendChild(bars("שינויים בלו״ז מהאתר", Object.keys(opsBy).map(function (id) { return [nm(id), opsBy[id]]; }), 8));
     var roles = {}; Object.keys(users).forEach(function (id) { var r = users[id].role || "ללא תפקיד"; roles[r] = (roles[r] || 0) + 1; });
     grid.appendChild(bars("משתמשים לפי תפקיד", Object.keys(roles).map(function (r) { return [r, roles[r]]; })));
@@ -2023,8 +2030,42 @@
       .forEach(function (x) { var r = el("div", "ins-row"); r.appendChild(el("span", "", x[1])); r.appendChild(el("b", x[0] ? "hot" : "", String(x[0]))); miss.appendChild(r); });
     grid.appendChild(miss);
     body.appendChild(grid);
-    body.appendChild(el("p", "note", "העלויות משוערות לפי מחירים ממוצעים בחנויות בארץ, לפי שם הפריט. הכניסות נספרות מהאתר החי בלבד."));
+    body.appendChild(el("p", "note", "המחירים נמצאים בחיפוש אוטומטי בגוגל (פריט חדש מקבל מחיר תוך כרבע שעה), ואפשר לתקן כל מחיר ברשימת המחירים. פריט שעוד אין לו מחיר נספר לפי הערכה. הכניסות נספרות מהאתר החי בלבד."));
   };
+  /* Every requested item with its price and where it came from; a manager can fix a price. */
+  function priceList(items) {
+    var p = el("section", "panel ins-p ins-prices"); p.appendChild(el("h3", "", "מחירי פריטים"));
+    var names = Object.keys(items).sort(function (a, b) { return items[b] - items[a]; });
+    if (!names.length) { p.appendChild(el("p", "muted-empty", "אין עדיין נתונים.")); return p; }
+    var list = el("div", "ins-plist"); p.appendChild(list);
+    names.forEach(function (n) {
+      var u = unitPrice(n), f = u && u.f, row = el("div", "ins-prow");
+      row.appendChild(el("span", "l", n));
+      var src = el("span", "src");
+      if (f && f.by === "manual") src.textContent = "עודכן ידנית";
+      else if (f && f.src) { var a = el("a", "", f.store || "מקור"); a.href = f.src; a.target = "_blank"; a.rel = "noopener"; src.appendChild(a); if (f.unit) src.appendChild(document.createTextNode(" · " + f.unit)); }
+      else if (u && u.est) src.textContent = "הערכה";
+      else src.textContent = "עוד אין מחיר";
+      row.appendChild(src);
+      var b = el("button", "ins-pv", u ? "₪" + (+u.p).toLocaleString("he-IL", { minimumFractionDigits: u.p % 1 ? 2 : 0, maximumFractionDigits: 2 }) : "—"); b.type = "button"; b.setAttribute("aria-label", "תיקון המחיר של " + n);
+      b.onclick = function () {
+        var inp = el("input", "ins-pin"); inp.type = "number"; inp.min = "0"; inp.step = "0.1"; inp.inputMode = "decimal"; inp.value = u ? +u.p.toFixed(2) : ""; inp.dir = "ltr";
+        b.replaceWith(inp); inp.focus(); inp.select();
+        var done = false, save = async function (ok) {
+          if (done) return; done = true; var v = parseFloat(inp.value);
+          if (!ok || !(v >= 0) || (u && v === +u.p.toFixed(2))) { inp.replaceWith(b); return; }
+          var e = {}; e[pkey(n)] = { name: n, price: v, by: "manual", t: Date.now() / 1000 };
+          try { await db.collection("config").doc("prices").set({ items: e }, { merge: true }); FOUND[pkey(n)] = e[pkey(n)]; toast("המחיר עודכן"); Ins.open(); }
+          catch (er) { toast("השמירה לא הצליחה", true); inp.replaceWith(b); }
+        };
+        inp.onkeydown = function (ev) { if (ev.key === "Enter") save(true); else if (ev.key === "Escape") save(false); };
+        inp.onblur = function () { save(true); };
+      };
+      row.appendChild(b); list.appendChild(row);
+    });
+    p.appendChild(el("small", "ins-phint", "המחיר הוא ליחידה אחת. לחיצה על מחיר מאפשרת לתקן אותו."));
+    return p;
+  }
   function bars(title, rows, max, unit) {
     var p = el("section", "panel ins-p"); p.appendChild(el("h3", "", title));
     rows = rows.filter(function (r) { return r[1] > 0; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, max || 12);
