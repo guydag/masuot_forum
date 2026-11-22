@@ -508,7 +508,7 @@
       Cal.empty = !s.exists; Cal.error = false;
       if (Cal.loaded) Cal.changed(); else ready();
     }, function () { Cal.error = true; ready(); }));
-    F.listen(db.collection("cal_ops").where("state", "==", "pending").onSnapshot(function (s) {
+    F.listen(db.collection("cal_ops").where("state", "in", ["pending", "working"]).onSnapshot(function (s) {
       var list = []; s.forEach(function (d) { var o = d.data(); o.id = d.id; list.push(o); });
       Cal.ops = list;
       if (Cal.loaded) Cal.changed(); else ready();
@@ -865,18 +865,34 @@
     if (document.documentElement.classList.contains("pv-open") || Cal.dragging()) return;
     e.preventDefault(); Cal.undo(y || e.shiftKey);
   });
+  /* A change still waiting can be replaced or cancelled only while the sync has not taken it;
+     once it is being written to the Excel, wait for it and continue from the event as it is there. */
+  function takeOp(opId, data) {
+    var ref = db.collection("cal_ops").doc(opId);
+    return db.runTransaction(function (tx) { return tx.get(ref).then(function (sn) {
+      if (!sn.exists || sn.data().state !== "pending") return false;
+      if (data) tx.set(ref, data, { merge: true }); else tx.delete(ref);
+      return true; }); });
+  }
+  async function settled(src) {
+    var f = srcFields(src);
+    for (var i = 0; i < 60; i++) { await new Promise(function (r) { setTimeout(r, 500); }); var e = findEv(f); if (e && !e.pend) return e; }
+    throw new Error("busy");
+  }
   async function saveChange(src, o, quiet) {
     if (!quiet) remember(src ? srcFields(src) : null, Object.assign({}, src ? srcFields(src) : {}, o));
     if (!src) return Cal.op(Object.assign({ kind: "add" }, o));
-    if (src.pend === "add" && src.opId) return db.collection("cal_ops").doc(src.opId).set(o, { merge: true });
+    if (src.pend === "add" && src.opId) { if (await takeOp(src.opId, o)) return; src = await settled(src); }
+    else if (src.pend && src.opId) { if (!(await takeOp(src.opId, null))) src = await settled(src); }
     var base = baseOf(src), moved = o.date !== base.date || (o.end || o.date) !== (base.end || base.date);
-    if (src.pend && src.opId) await db.collection("cal_ops").doc(src.opId).delete();
     return Cal.op(Object.assign({ kind: moved ? "move" : "edit", target: base.id, sheet: base.sheet, ref: base.ref, raw: base.raw }, o));
   }
   async function deleteEvent(src, quiet) {
     if (!quiet) remember(srcFields(src), null);
-    if (src.pend && src.opId) await db.collection("cal_ops").doc(src.opId).delete();
-    if (src.pend === "add") return;
+    if (src.pend && src.opId) {
+      if (await takeOp(src.opId, null)) { if (src.pend === "add") return; }
+      else src = await settled(src);
+    }
     var base = baseOf(src);
     if (base.sheet) await Cal.op({ kind: "delete", target: base.id, sheet: base.sheet, ref: base.ref, raw: base.raw, title: base.title });
   }
