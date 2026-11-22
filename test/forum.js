@@ -837,14 +837,44 @@
   };
   function baseOf(src) { return Cal.events.filter(function (x) { return x.id === src.id; })[0] || src; }
   /* Apply a change to one event: a new event, a pending one, or one already in the Excel. */
-  async function saveChange(src, o) {
+  /* Undo / redo (Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y; ⌘ on Mac) for the changes made here, in this visit. */
+  var UNDO = [], REDO = [];
+  function remember(before, after) { UNDO.push({ b: before, a: after }); if (UNDO.length > 40) UNDO.shift(); REDO = []; }
+  function sameEv(e, f) { return e.title === f.title && e.date === f.date && (e.end || e.date) === (f.end || f.date) && (e.time || "") === (f.time || "") && (e.timeEnd || "") === (f.timeEnd || ""); }
+  function findEv(f) { var all = Cal.visible().filter(function (e) { return !e.hide && sameEv(e, f); }); return all.filter(function (e) { return e.pend; })[0] || all[0] || null; }
+  /* Turn the calendar from the state "from" of one event to the state "to" (null = no event). */
+  async function applyState(from, to) {
+    if (!from) { await saveChange(null, to, true); return true; }
+    var cur = findEv(from); if (!cur) return false;
+    if (!to) await deleteEvent(cur, true); else await saveChange(cur, to, true);
+    return true;
+  }
+  Cal.undo = async function (redo) {
+    var st = redo ? REDO : UNDO, x = st.pop(); if (!x) { toast(redo ? "אין מה לשחזר" : "אין מה לבטל"); return; }
+    try {
+      var ok = redo ? await applyState(x.b, x.a) : await applyState(x.a, x.b);
+      if (!ok) { toast("האירוע השתנה בינתיים, אי אפשר לבטל"); return; }
+      (redo ? UNDO : REDO).push(x);
+      toast(redo ? "השינוי שוחזר" : "השינוי בוטל");
+    } catch (er) { st.push(x); toast("הפעולה לא הצליחה", true); }
+  };
+  document.addEventListener("keydown", function (e) {
+    if (F.area !== "cal" || !(e.ctrlKey || e.metaKey) || e.altKey || !can.editCal()) return;
+    var z = e.code === "KeyZ", y = e.code === "KeyY"; if (!z && !y) return;
+    var a = document.activeElement; if (a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable)) return;
+    if (document.documentElement.classList.contains("pv-open") || Cal.dragging()) return;
+    e.preventDefault(); Cal.undo(y || e.shiftKey);
+  });
+  async function saveChange(src, o, quiet) {
+    if (!quiet) remember(src ? srcFields(src) : null, Object.assign({}, src ? srcFields(src) : {}, o));
     if (!src) return Cal.op(Object.assign({ kind: "add" }, o));
     if (src.pend === "add" && src.opId) return db.collection("cal_ops").doc(src.opId).set(o, { merge: true });
     var base = baseOf(src), moved = o.date !== base.date || (o.end || o.date) !== (base.end || base.date);
     if (src.pend && src.opId) await db.collection("cal_ops").doc(src.opId).delete();
     return Cal.op(Object.assign({ kind: moved ? "move" : "edit", target: base.id, sheet: base.sheet, ref: base.ref, raw: base.raw }, o));
   }
-  async function deleteEvent(src) {
+  async function deleteEvent(src, quiet) {
+    if (!quiet) remember(srcFields(src), null);
     if (src.pend && src.opId) await db.collection("cal_ops").doc(src.opId).delete();
     if (src.pend === "add") return;
     var base = baseOf(src);
