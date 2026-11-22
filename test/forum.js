@@ -54,6 +54,7 @@
     copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
     dl: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/>',
     excel: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 12l4 5M13 12l-4 5"/>',
+    calplus: '<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M12 12.5v5M9.5 15h5"/>',
     google: '<path d="M21 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h5a4.3 4.3 0 0 1-1.9 2.8v2.3h3A9 9 0 0 0 21 12.2z"/><path d="M12 21c2.4 0 4.5-.8 6-2.2l-3-2.3a5.4 5.4 0 0 1-8-2.8H4v2.4A9 9 0 0 0 12 21z"/><path d="M7 13.7a5.4 5.4 0 0 1 0-3.4V7.9H4a9 9 0 0 0 0 8.2z"/><path d="M12 6.6c1.3 0 2.5.5 3.5 1.4l2.6-2.6A9 9 0 0 0 4 7.9l3 2.4a5.4 5.4 0 0 1 5-3.7z"/>',
     img: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 16l-5-5-9 9"/>'
   };
@@ -929,7 +930,7 @@
     body.innerHTML = '<div class="evd-head"><i></i><h3>' + esc(ev.t) + "</h3>" + (edit ? '<button class="icon-btn" data-edit aria-label="עריכה" title="עריכה">' + svg("pen") + '</button><button class="icon-btn" data-del aria-label="מחיקה" title="מחיקה">' + svg("trash") + "</button>" : "") + '<button class="icon-btn" data-x aria-label="סגירה">' + svg("x") + "</button></div>" +
       '<div class="evd-row">' + svg("clock", 18) + "<span>" + when + "</span></div>" +
       (ev.cat ? '<div class="evd-row">' + svg("tag", 18) + '<span class="evd-cat"><i style="background:' + esc(c) + '"></i>' + esc(ev.cat) + "</span></div>" : "") +
-      '<a class="btn ghost small evd-open" target="_blank" rel="noopener" href="' + esc(gcalLink(src)) + '">' + svg("google", 17) + "הוספה ליומן Google</a>";
+      '<a class="btn ghost small evd-open" target="_blank" rel="noopener" href="' + esc(gcalLink(src)) + '">' + svg("calplus", 17) + "הוספה ליומן גוגל</a>";
     var box = openModal({ label: ev.t, body: body, cls: "evd-box" });
     body.querySelector("[data-x]").onclick = function () { closePreview(); };
     var ed = body.querySelector("[data-edit]"); if (ed) ed.onclick = function () { Cal.form({ ev: ev }); };
