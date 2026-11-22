@@ -991,7 +991,7 @@
   document.addEventListener("mousemove", function (e) { if (TGD.touch || !TGD.col) return;
     if (!TGD.active) { if (Math.abs(e.clientY - TGD.y0) < 6) return; tgStart(TGD.col, TGD.y0); }
     TGD.b = tgMin(TGD.col, e.clientY); if (TGD.b === TGD.a) TGD.b = TGD.a + 15; tgDraw(); e.preventDefault(); });
-  document.addEventListener("mouseup", function () { if (TGD.touch) return; tgEnd(TGD.active); });
+  document.addEventListener("mouseup", function (e) { if (TGD.touch) return; tgEnd(TGD.active && inCal(e)); });
   document.addEventListener("touchstart", function (e) { if (!can.editCal() || e.touches.length !== 1) return; var col = e.target.closest && e.target.closest(".tg-col[data-act]"); if (!col || e.target.closest(".tg-ev")) return;
     var t = e.touches[0]; TGD.touch = true; TGD.col = col; TGD.y0 = t.clientY; TGD.x0 = t.clientX; clearTimeout(TGD.timer);
     TGD.timer = setTimeout(function () { if (!TGD.col) return; tgStart(col, TGD.y0); if (navigator.vibrate) try { navigator.vibrate(12); } catch (_) {} }, 380); }, { passive: true });
@@ -1051,8 +1051,22 @@
   document.addEventListener("mousemove", function (e) { if (MC.touch || !MC.c0) return;
     if (!MC.active) { if (Math.hypot(e.clientX - MC.x0, e.clientY - MC.y0) < 8) return; mcStart(MC.c0); }
     e.preventDefault(); mcMove(e.clientX, e.clientY); });
-  document.addEventListener("mouseup", function () { if (MC.touch) return; mcEnd(MC.active); });
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && MC.active) mcEnd(false); });
+  document.addEventListener("mouseup", function (e) { if (MC.touch) return; mcEnd(MC.active && inCal(e)); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    if (MC.active) mcEnd(false); if (DD.active) ddEnd(false); if (MV.active) mvEnd(false); if (TGD.active) tgEnd(false);
+    document.body.classList.remove("drag-out");
+  });
+  /* Letting go outside the calendar cancels a drag, like Escape. While outside, the drag looks faded. */
+  function inCal(e) {
+    var b = Cal.body && Cal.body.getBoundingClientRect(); if (!b || !e || e.clientX == null) return true;
+    return e.clientX >= b.left - 4 && e.clientX <= b.right + 4 && e.clientY >= b.top - 4 && e.clientY <= b.bottom + 4;
+  }
+  document.addEventListener("mousemove", function (e) {
+    var on = DD.active || MV.active || TGD.active || MC.active;
+    document.body.classList.toggle("drag-out", !!on && !inCal(e));
+  });
+  document.addEventListener("mouseup", function () { setTimeout(function () { document.body.classList.remove("drag-out"); }, 0); });
   function buzz() { if (navigator.vibrate) try { navigator.vibrate(12); } catch (_) {} }
   /* A long press must not open the phone's own menu. */
   document.addEventListener("contextmenu", function (e) { if (e.target.closest && e.target.closest(".cv-body .cv-chip, .cv-body .cv-bar, .cv-body .tg-ev")) e.preventDefault(); });
@@ -1118,7 +1132,7 @@
   document.addEventListener("mousemove", function (e) { if (DD.touch) return;
     if (DD.pend && !DD.active) { if (Math.hypot(e.clientX - DD.x0, e.clientY - DD.y0) < 6) return; var p = DD.pend; DD.pend = null; ddStart(p, DD.pendMode, DD.x0, DD.y0); }
     if (!DD.active) return; e.preventDefault(); ddMove(e.clientX, e.clientY); });
-  document.addEventListener("mouseup", function () { if (DD.touch) return; DD.pend = null; if (DD.active) ddEnd(true); });
+  document.addEventListener("mouseup", function (e) { if (DD.touch) return; DD.pend = null; if (DD.active) ddEnd(inCal(e)); });
   document.addEventListener("touchstart", function (e) {
     if (e.touches.length !== 1 || DD.active || MV.active) return; var s = ddSource(e.target); if (!s || !ddEvent(s[0])) return;
     var t = e.touches[0], tgt = e.target; DD.touch = true; DD.pend = s[0]; DD.pendMode = s[1]; DD.x0 = t.clientX; DD.y0 = t.clientY; clearTimeout(DD.timer);
@@ -1194,7 +1208,7 @@
   document.addEventListener("mousemove", function (e) { if (MV.touch) return;
     if (MV.pend && !MV.active) { if (Math.hypot(e.clientX - MV.x0, e.clientY - MV.y0) < 6) return; var b = MV.pend; MV.pend = null; mvStart(b, MV.x0, MV.y0); }
     if (!MV.active) return; e.preventDefault(); mvMove(e.clientX, e.clientY); });
-  document.addEventListener("mouseup", function () { if (MV.touch) return; MV.pend = null; if (MV.active) mvEnd(true); });
+  document.addEventListener("mouseup", function (e) { if (MV.touch) return; MV.pend = null; if (MV.active) mvEnd(inCal(e)); });
   document.addEventListener("touchstart", function (e) {
     if (e.touches.length !== 1 || MV.active) return; var b = e.target.closest && e.target.closest(".cv-body .tg-ev"); if (!b || !mvEvent(b)) return;
     var t = e.touches[0], tgt = e.target; MV.touch = true; MV.pend = b; MV.x0 = t.clientX; MV.y0 = t.clientY; clearTimeout(MV.timer);
