@@ -1020,18 +1020,23 @@
   function ddSource(t) {
     if (!t || !t.closest) return null;
     var m = t.closest(".cv-month .cv-chip[data-act='calev'], .cv-month .cv-bar"); if (m) return [m, "month"];
+    /* the list of a day ("עוד N פריטים") can be dragged from too */
+    var q = t.closest(".dpp-list .cv-chip[data-act='calev']"); if (q && document.querySelector(".cv-month")) return [q, "pop"];
     var r = t.closest(".cv-body .tg-allrow .cv-bar, .cv-body .tg-ad .cv-chip[data-act='calev']"); if (r) return [r, "row"];
     return null;
   }
   function ddStart(n, mode, x, y) {
     var ev = ddEvent(n); if (!ev) return;
-    DD.mode = mode; var under = ddDayAt(x, y); if (!under) return;
-    var sp = ddSpan(ev);
+    var fromPop = mode === "pop"; if (fromPop) mode = "month";
+    DD.mode = mode; var under = ddDayAt(x, y); var sp = ddSpan(ev);
+    if (fromPop) under = sp[0];
+    if (!under) return;
     Object.assign(DD, { active: true, ev: ev, idx: +n.dataset.i, nd: sp[1], d0: sp[0], grab: Math.max(0, Math.min(sp[1] - 1, diffDays(sp[0], under))), target: sp[0], zone: null, lastX: x, lastY: y });
     n.classList.add("mv-src");
     var r = n.getBoundingClientRect(), g = n.cloneNode(true); g.classList.remove("mv-src"); g.classList.add("dd-ghost"); g.removeAttribute("data-act");
     g.style.width = Math.min(r.width, 240) + "px"; g.style.height = r.height + "px"; DD.gx = x - r.left; DD.gy = y - r.top; if (DD.gx > Math.min(r.width, 240)) DD.gx = Math.min(r.width, 240) / 2;
     document.body.appendChild(g); DD.ghost = g;
+    if (fromPop) { DD.gx = Math.min(r.width, 240) / 2; DD.gy = r.height / 2; closeFP(); }
     document.body.classList.add("tg-dragging"); SWP.on = false;
     if (navigator.vibrate) try { navigator.vibrate(12); } catch (_) {}
     ddMove(x, y);
