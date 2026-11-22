@@ -612,3 +612,7 @@ a.tab-brand { text-decoration: none; color: inherit; }
 .eu-f[hidden] { display: none !important; }
 /* Month view: the new event being dragged across days */
 .cv-bar.mc-prev { --cc: #7c87c9; --ci: #fff; background: #7c87c9; color: #fff; box-shadow: 0 4px 12px rgba(60,60,120,.3); pointer-events: none; z-index: 3; }
+/* A drag outside the calendar will be cancelled: show it faded */
+body.drag-out .dd-ghost, body.drag-out .mv-box, body.drag-out .tg-sel, body.drag-out .mc-prev { opacity: .28 !important; }
+body.drag-out .dd-on { background: none !important; box-shadow: none !important; outline: none !important; }
+body.drag-out { cursor: not-allowed; }
