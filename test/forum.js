@@ -308,6 +308,21 @@
     });
     document.body.appendChild(nav);
   }
+  /* No browser tooltips when hovering over buttons: the name moves to aria-label (for screen readers) and the title is removed. */
+  function noTips(root) {
+    var list = root.querySelectorAll ? root.querySelectorAll("[title]") : [];
+    if (root.hasAttribute && root.hasAttribute("title")) list = [root].concat(Array.prototype.slice.call(list));
+    Array.prototype.forEach.call(list, function (n) {
+      if (n.tagName === "IFRAME" || n.closest("svg")) return;
+      var t = n.getAttribute("title"); if (t && !n.getAttribute("aria-label")) n.setAttribute("aria-label", t);
+      n.removeAttribute("title");
+    });
+  }
+  noTips(document.body);
+  new MutationObserver(function (ms) { ms.forEach(function (m) {
+    if (m.type === "attributes") { if (m.target.hasAttribute("title")) noTips(m.target); return; }
+    Array.prototype.forEach.call(m.addedNodes, function (n) { if (n.nodeType === 1) noTips(n); });
+  }); }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["title"] });
   F.badge = function (area, n, dot) {
     var b = document.querySelector('.tab[data-area="' + area + '"] .bdg'); if (!b) return;
     b.hidden = !n; b.classList.toggle("dot", !!dot); b.textContent = dot ? "" : n > 9 ? "9+" : String(n || "");
