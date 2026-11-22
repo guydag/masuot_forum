@@ -261,9 +261,10 @@ a.kpi:hover { transform: translateY(-2px); }
   .cv-top { gap: 6px; }
   .cv-nav { order: 1; flex: 1 1 0; }
   .cv-info { order: 2; }
+  .cv-add { order: 2; }
   .seg.cv-seg { order: 3; width: 100%; }
   .seg.cv-seg .seg-b { flex: 1 1 0; padding: 0 6px; }
-  .cv-title { font-size: 18px; }
+  .cv-title { font-size: 17px; margin: 0 4px; }
 }
 .cv-body { margin-top: 2px; animation: cvIn .25s ease; touch-action: pan-y; }
 .cv-body.still { animation: none; }
@@ -616,3 +617,10 @@ a.tab-brand { text-decoration: none; color: inherit; }
 body.drag-out .dd-ghost, body.drag-out .mv-box, body.drag-out .tg-sel, body.drag-out .mc-prev { opacity: .28 !important; }
 body.drag-out .dd-on { background: none !important; box-shadow: none !important; outline: none !important; }
 body.drag-out { cursor: not-allowed; }
+/* Phone: "אירוע חדש" sits in the top bar, so nothing covers the bottom of the calendar */
+.cv-add { display: none; }
+@media (max-width: 600px) {
+  .cal-fab { display: none !important; }
+  .cv-add { display: inline-grid; place-items: center; background: var(--accent) !important; color: #fff !important; border-radius: 12px; width: 38px; height: 38px; }
+  .cv-add svg { stroke: #fff; stroke-width: 2.6; }
+}

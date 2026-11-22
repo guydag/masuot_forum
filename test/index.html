@@ -39,7 +39,7 @@
 <meta name="application-name" content="פורום מוביל">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <meta name="theme-color" content="#fffaf3">
-<link rel="stylesheet" href="forum.css?v=43">
+<link rel="stylesheet" href="forum.css?v=46">
 <script>
 /* Set the theme before the page paints so a dark choice never flashes light first. */
 (function () {
@@ -742,7 +742,7 @@ button:focus-visible, summary:focus-visible, .eu-roles input:focus-visible + lab
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<script src="forum.js?v=45"></script>
+<script src="forum.js?v=46"></script>
 <script>
 document.documentElement.lang = "he";
 document.documentElement.dir = "rtl";
@@ -1899,7 +1899,7 @@ function maybeWelcome() {
     head.appendChild(tt);
     var body = document.createElement("div"); body.className = "ih-body";
     var ol = document.createElement("ol"); ol.className = "ih-steps";
-    ["ביומן רואים את הלו״ז השבטי, ובלחיצה על אירוע אפשר להוסיף אותו ליומן שלכם.",
+    ["בלו״ז רואים את כל אירועי השבט, ובלחיצה על אירוע אפשר להוסיף אותו ליומן Google שלכם.",
      "בסרגל למטה: שריון מתחמים, בקשת ציוד, הרשומים וקישורים שימושיים.",
      "מוסיפים את האתר למסך הבית, וככה גם מקבלים התראות לטלפון."].forEach(function (t) { var li = document.createElement("li"); var sp = document.createElement("span"); sp.textContent = t; li.appendChild(sp); ol.appendChild(li); });
     body.appendChild(ol);
