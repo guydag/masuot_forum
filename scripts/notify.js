@@ -2,7 +2,7 @@
    and sends a push notification to the phones that follow them. */
 const admin = require("firebase-admin");
 
-const SITE = "https://guydag.github.io/biconverter/";
+const SITE = "https://guydag.github.io/masuot_forum/";
 if (!process.env.FIREBASE_SERVICE_ACCOUNT) { console.log("FIREBASE_SERVICE_ACCOUNT is not set yet; nothing to do."); process.exit(0); }
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
 const db = admin.firestore();

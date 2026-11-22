@@ -612,6 +612,15 @@ def publish_people(db, firestore, users):
         print("Could not update the people lists:", e)
 
 
+SITE = "https://guydag.github.io/masuot_forum/"
+
+
+def site_url(saved):
+    """The site a link should open: the one the item was made on (live or test), at the site's current address."""
+    saved = (saved or SITE).replace("/biconverter/", "/masuot_forum/")
+    return saved if saved.startswith("https://guydag.github.io/masuot_forum/") else SITE
+
+
 def send_push(db, tokens_by_user, emails, title, body, link):
     from firebase_admin import messaging
     owners = {}
@@ -624,7 +633,7 @@ def send_push(db, tokens_by_user, emails, title, body, link):
     res = messaging.send_each_for_multicast(messaging.MulticastMessage(
         tokens=tokens,
         webpush=messaging.WebpushConfig(
-            notification=messaging.WebpushNotification(title=title, body=body, icon="https://guydag.github.io/biconverter/icon-192.png?v=3", badge="https://guydag.github.io/biconverter/icon-192.png?v=3", direction="rtl", language="he"),
+            notification=messaging.WebpushNotification(title=title, body=body, icon="https://guydag.github.io/masuot_forum/icon-192.png?v=3", badge="https://guydag.github.io/masuot_forum/icon-192.png?v=3", direction="rtl", language="he"),
             fcm_options=messaging.WebpushFCMOptions(link=link))))
     for r, t in zip(res.responses, tokens):
         code = getattr(r.exception, "code", "") if r.exception else ""
@@ -790,7 +799,7 @@ class Sync:
                     tokens = {x.id: (x.to_dict() or {}).get("tokens", []) or [] for x in self.db.collection("subs").stream()}
                 when = "בעוד 3 ימים" if days == 3 else "מחר"
                 place = need[b["area"]] + (" · " + f["where"] if b.get("area") == "out" and f.get("where") else "")
-                link = (b.get("site") or "https://guydag.github.io/biconverter/test/") + "#book"
+                link = site_url(b.get("site")) + "#book"
                 try:
                     n = send_push(self.db, tokens, [b["uid"]], "חסר בוגר בשריון ⚠️", place + " " + when + " · " + (f.get("unit") or "") + " · אפשר להוסיף בוגר בשריון", link)
                     print("Boger reminder", d.id, key, "->", n, "devices")
@@ -807,7 +816,7 @@ class Sync:
         words = {"approved": "אושרה ✅", "changes": "הוחזרה לתיקון ✏️", "rejected": "נדחתה"}
         for d in docs:
             g = d.to_dict() or {}
-            link = (g.get("site") or "https://guydag.github.io/biconverter/") + "#gear"
+            link = site_url(g.get("site")) + "#gear"
             try:
                 if g.get("pushTo") == "owner":
                     st = g.get("status", "")

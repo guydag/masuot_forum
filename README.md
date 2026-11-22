@@ -1,4 +1,4 @@
-# biconverter
+# masuot_forum
 ## התראות לטלפון
 
 הקוד נמצא באתר עצמו (הגדרות ← התראות, מוצג רק בטלפון) וב-`scripts/notify.js`, שרץ בחינם ב-GitHub Actions כל כמה דקות (`.github/workflows/notify.yml`) ושולח את ההתראות דרך Firebase Cloud Messaging.
