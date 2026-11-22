@@ -692,7 +692,8 @@
     var k = st.view + "|" + calPeriodKey(st.date); still = still || Cal.lastKey === k; Cal.lastKey = k;
     Cal.top.innerHTML = '<div class="cv-nav"><button class="cv-today" data-act="caltoday">היום</button><button class="icon-btn" data-act="calprev" aria-label="הקודם">' + svg("prev") + '</button><button class="icon-btn" data-act="calnext" aria-label="הבא">' + svg("next") + '</button><h1 class="cv-title">' + esc(calTitle()) + "</h1></div>" +
       '<div class="seg cv-seg" role="tablist">' + CAL_VIEWS.map(function (x) { return '<button class="seg-b ' + (st.view === x[0] ? "on" : "") + '" data-act="calview" data-v="' + x[0] + '" role="tab" aria-selected="' + (st.view === x[0]) + '">' + x[1] + "</button>"; }).join("") + "</div>" +
-      '<button class="icon-btn cv-info" data-act="calinfo" aria-label="מקרא הקטגוריות" title="מקרא הקטגוריות">' + svg("info", 22) + "</button>";
+      '<button class="icon-btn cv-info" data-act="calinfo" aria-label="מקרא הקטגוריות" title="מקרא הקטגוריות">' + svg("info", 22) + "</button>" +
+      (can.editCal() ? '<button class="icon-btn cv-add" data-act="calnew" aria-label="אירוע חדש" title="אירוע חדש">' + svg("plus", 22) + "</button>" : "");
     if (!Cal.loaded) { Cal.body.innerHTML = '<div class="cv-loading"><span class="spin-dot"></span></div>'; return; }
     if (Cal.error) { Cal.body.innerHTML = '<div class="empty-state"><h3>אין הרשאה לקרוא את הלו״ז</h3></div>'; return; }
     var body = st.view === "month" ? calMonth() : st.view === "week" ? calTimeGrid(7) : st.view === "day" ? calTimeGrid(1) : calAgenda();
@@ -758,7 +759,7 @@
     var st = Cal.st, key = st.view + "|" + (st.view === "week" ? weekStart(st.date) : st.date);
     if (st.tgKey === key && st.tgTop != null) sc.scrollTop = st.tgTop;
     else { var now = new Date(), isToday = (st.view === "day" && st.date === today()) || (st.view === "week" && weekStart(st.date) === weekStart(today()));
-      sc.scrollTop = 10 * tgHH(); st.tgKey = key; }
+      sc.scrollTop = Math.max(0, 10 * tgHH() - 8); st.tgKey = key; }
     st.tgTop = sc.scrollTop; sc.onscroll = function () { st.tgTop = sc.scrollTop; };
   }
   function calSlide(dir) {
@@ -1340,6 +1341,7 @@
   Book.render = function () {
     if (!Book.built) return;
     Book.xl.hidden = !can.exportBookings();
+    Book.sortSel.hidden = Book.tab !== "next";
     var miss = Book.mineMissing();
     Book.seg.textContent = "";
     [["next", "פעולות קרובות"], ["mine", "השריונים שלי"]].forEach(function (s) {
@@ -1361,7 +1363,6 @@
       });
       return;
     }
-    Book.sortSel.hidden = Book.tab !== "next";
     var set = {};
     Object.keys(F.activityOnly()).forEach(function (d) { if (d >= t && d <= lim) set[d] = true; });
     Book.list.forEach(function (b) { if (b.date >= t && b.date <= lim) set[b.date] = true; });
