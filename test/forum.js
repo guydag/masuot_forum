@@ -701,7 +701,7 @@
     afterCalendarRender();
   };
   /* While an event is held or dragged the calendar must not be drawn again (it would drop the drag). */
-  Cal.dragging = function () { return !!(DD.active || MV.active || TGD.active || DD.pend || MV.pend || (TGD.touch && TGD.col)); };
+  Cal.dragging = function () { return !!(DD.active || MV.active || TGD.active || DD.pend || MV.pend || (TGD.touch && TGD.col) || (typeof MC !== "undefined" && (MC.active || MC.c0))); };
   Cal.fit = function () { if (!Cal.dragging()) calFit(); };
   function calFit() {
     var elx = Cal.body.querySelector(".cv-grid") || document.getElementById("tgscroll"); if (!elx) return;
@@ -917,7 +917,7 @@
     if (!can.editCal()) return;
     o = o || {};
     var ev = o.ev || null, src = ev ? ev.src : null, edit = !!src;
-    var st = { multi: false, timed: o.m0 != null, d1: o.d || today(), d2: o.d || today(), m0: o.m0 != null ? o.m0 : 16 * 60 + 30, m1: o.m0 != null ? (o.m1 != null ? Math.min(1439, o.m1) : Math.min(1439, o.m0 + 60)) : 18 * 60 };
+    var st = { multi: !!(o.d2 && o.d2 !== o.d), timed: o.m0 != null, d1: o.d || today(), d2: o.d2 || o.d || today(), m0: o.m0 != null ? o.m0 : 16 * 60 + 30, m1: o.m0 != null ? (o.m1 != null ? Math.min(1439, o.m1) : Math.min(1439, o.m0 + 60)) : 18 * 60 };
     if (edit) {
       st.d1 = src.date; st.d2 = src.end || src.date; st.multi = st.d2 !== st.d1;
       var a = hmToMin(src.time), b = hmToMin(src.timeEnd);
@@ -1014,6 +1014,45 @@
     if (!c2) { var bd = 1e9; cells.forEach(function (k) { var r = k.getBoundingClientRect(), dd = Math.min(Math.abs(x - r.left), Math.abs(x - r.right)); if (dd < bd) { bd = dd; c2 = k; } }); }
     return c2 ? c2.dataset.d : null;
   }
+  /* Month view, on a computer: drag across empty days to make a new event over them (like dragging over hours in week view). */
+  var MC = { c0: null, active: false, a: null, b: null, endedAt: 0 };
+  function mcCells() { return Array.prototype.slice.call(document.querySelectorAll(".cv-month .cv-cell[data-d]")); }
+  function mcDayAt(x, y) { var c = mcCells().filter(function (c) { var r = c.getBoundingClientRect(); return x >= r.left && x < r.right && y >= r.top && y < r.bottom; })[0]; return c ? c.dataset.d : null; }
+  function mcSource(t) {
+    if (!t || !t.closest || !can.editCal()) return null;
+    var cell = t.closest(".cv-month .cv-cell[data-d]"); if (!cell) return null;
+    if (t.closest(".cv-chip, .cv-bar, .cv-more, .cv-num")) return null;
+    return cell;
+  }
+  function mcDraw() {
+    Array.prototype.forEach.call(document.querySelectorAll(".mc-prev"), function (x) { x.remove(); });
+    var lo = MC.a < MC.b ? MC.a : MC.b, hi = MC.a < MC.b ? MC.b : MC.a;
+    Array.prototype.forEach.call(document.querySelectorAll(".cv-month .cv-wk"), function (wk) {
+      var cells = wk.querySelectorAll(".cv-cell[data-d]"); if (!cells.length) return;
+      var c0 = -1, c1 = -1;
+      Array.prototype.forEach.call(cells, function (c, k) { if (c.dataset.d >= lo && c.dataset.d <= hi) { if (c0 < 0) c0 = k; c1 = k; } });
+      if (c0 < 0) return;
+      var bars = wk.querySelector(".cv-bars"); if (!bars) { bars = el("div", "cv-bars"); wk.appendChild(bars); }
+      var b = el("div", "cv-chip ad cv-bar mc-prev" + (cells[c0].dataset.d > lo ? " cl" : "") + (cells[c1].dataset.d < hi ? " cr" : ""));
+      b.style.cssText = "--c0:" + c0 + ";--sp:" + (c1 - c0 + 1) + ";--ln:0";
+      b.innerHTML = "<span>(אין כותרת)</span>"; bars.appendChild(b);
+    });
+  }
+  function mcStart(cell) { MC.active = true; MC.a = MC.b = cell.dataset.d; document.body.classList.add("tg-dragging"); SWP.on = false; mcDraw(); }
+  function mcMove(x, y) { var d = mcDayAt(x, y); if (d && d !== MC.b) { MC.b = d; mcDraw(); } }
+  function mcEnd(open) {
+    clearTimeout(MC.timer); var was = MC.active; MC.c0 = null; if (!was) return;
+    MC.active = false; MC.endedAt = DD.endedAt = Date.now(); document.body.classList.remove("tg-dragging");
+    var lo = MC.a < MC.b ? MC.a : MC.b, hi = MC.a < MC.b ? MC.b : MC.a;
+    var clear = function () { Array.prototype.forEach.call(document.querySelectorAll(".mc-prev"), function (x) { x.remove(); }); };
+    if (open) { Cal.form({ d: lo, d2: hi }); setTimeout(clear, 250); } else clear();
+  }
+  document.addEventListener("mousedown", function (e) { if (e.button !== 0 || !isDesk()) return; var c = mcSource(e.target); if (!c) return; MC.c0 = c; MC.x0 = e.clientX; MC.y0 = e.clientY; MC.touch = false; });
+  document.addEventListener("mousemove", function (e) { if (MC.touch || !MC.c0) return;
+    if (!MC.active) { if (Math.hypot(e.clientX - MC.x0, e.clientY - MC.y0) < 8) return; mcStart(MC.c0); }
+    e.preventDefault(); mcMove(e.clientX, e.clientY); });
+  document.addEventListener("mouseup", function () { if (MC.touch) return; mcEnd(MC.active); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && MC.active) mcEnd(false); });
   function buzz() { if (navigator.vibrate) try { navigator.vibrate(12); } catch (_) {} }
   /* A long press must not open the phone's own menu. */
   document.addEventListener("contextmenu", function (e) { if (e.target.closest && e.target.closest(".cv-body .cv-chip, .cv-body .cv-bar, .cv-body .tg-ev")) e.preventDefault(); });
