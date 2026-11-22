@@ -300,9 +300,14 @@
     nav.appendChild(brand);
     AREAS.forEach(function (a) {
       var t = el("a", "tab" + (a.bottom ? " tab-bottom" : "")); t.href = "#" + a.key; t.dataset.area = a.key;
-      t.setAttribute("aria-label", a.label); t.title = a.label; t.draggable = false;
+      t.setAttribute("aria-label", a.label); t.draggable = false;
       t.innerHTML = svg(a.icon, 24) + '<span class="tl"></span><span class="bdg" hidden></span>';
       t.querySelector(".tl").textContent = a.label;
+      /* The לו״ז tab always opens the month view. */
+      if (a.key === "cal") t.addEventListener("click", function () {
+        var C = F.Cal; if (!C || C.st.view === "month") return;
+        C.st.view = "month"; C.st.tgKey = null; if (F.area === "cal" && C.built) C.render();
+      });
       if (a.adminDesk) t.hidden = true;
       nav.appendChild(t);
     });
