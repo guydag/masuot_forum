@@ -759,7 +759,7 @@ var ALIASES = [
   ["טיול פסח שבטי", "פסח שבטי"],
   ["יום צופה", "טיול דרגה"]
 ];
-var VERSION = "v3.1";
+var VERSION = "v3.2";
 var IS_TEST = /\/test\/(index\.html)?$/.test(location.pathname);
 if (IS_TEST) { VERSION += " · בדיקות"; (function () { var b = document.createElement("div"); b.className = "test-ribbon"; b.textContent = "סביבת בדיקות"; document.body.appendChild(b); })(); }
 /* Pull down from the top of the screen to refresh, like a regular phone app. */
@@ -1963,8 +1963,8 @@ route();
 /* Appearance: automatic (follows the device), light or dark. The first paint is themed in the page head. */
 function themeMode() { var t = null; try { t = localStorage.getItem("theme"); } catch (e) {} return t === "dark" || t === "light" ? t : "auto"; }
 function applyTheme(mode) {
-  var t = mode;
-  if (mode === "auto") t = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  /* פורום מוביל is always light, whatever the device or an old saved choice says. */
+  var t = "light";
   document.documentElement.setAttribute("data-theme", t);
   var m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = t === "dark" ? "#1f2430" : "#fffaf3";
   Array.prototype.forEach.call(document.querySelectorAll("#themeSeg button"), function (b) { b.setAttribute("aria-checked", String(b.getAttribute("data-mode") === mode)); });
@@ -1976,7 +1976,6 @@ Array.prototype.forEach.call(document.querySelectorAll("#themeSeg button"), func
     applyTheme(mode);
   });
 });
-try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { if (themeMode() === "auto") applyTheme("auto"); }); } catch (e) {}
 applyTheme(themeMode());
 
 /* User management (admins only). Firestore rules decide who may read or write these. */
