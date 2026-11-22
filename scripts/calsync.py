@@ -643,6 +643,59 @@ def send_push(db, tokens_by_user, emails, title, body, link):
     return res.success_count
 
 
+def price_key(name):
+    """The same item written a little differently gets the same price."""
+    k = re.sub(r"\s+", " ", str(name or "")).strip().lower()
+    return re.sub(r"[.~*/\[\]`]", "-", k)[:120]
+
+
+def ask_price(key, name):
+    """Gemini (free tier) with Google Search: the usual price in Israel of one unit of the item. Returns a dict or None."""
+    import urllib.request
+    import urllib.parse
+    prompt = (
+        "פריט מתוך בקשת ציוד של שבט צופים בישראל: \"" + name + "\".\n"
+        "חפש בגוגל את המחיר הרגיל לצרכן בישראל, בשקלים, של יחידה אחת של הפריט (כפי שסופרים אותו בבקשה; "
+        "למשל חבילה אם השם הוא חבילה, אחרת פריט בודד). העדף חנויות ישראליות מוכרות או זאפ.\n"
+        "ענה רק ב-JSON בשורה אחת, בלי שום טקסט נוסף: "
+        "{\"price\": מספר או null, \"unit\": \"על מה המחיר, בקצרה\", \"store\": \"שם החנות או האתר\", \"url\": \"קישור לעמוד המוצר\"}"
+    )
+    body = json.dumps({"contents": [{"parts": [{"text": prompt}]}], "tools": [{"google_search": {}}],
+                       "generationConfig": {"temperature": 0.1}}).encode()
+    url = ("https://generativelanguage.googleapis.com/v1beta/models/" + PRICE_MODEL + ":generateContent")
+    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json", "x-goog-api-key": os.environ["GEMINI_API_KEY"]})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        res = json.loads(r.read().decode())
+    cand = (res.get("candidates") or [{}])[0]
+    text = "".join(p.get("text", "") for p in ((cand.get("content") or {}).get("parts") or []))
+    m = re.search(r"\{.*\}", text, re.S)
+    if not m:
+        return None
+    try:
+        d = json.loads(m.group(0))
+    except Exception:
+        return None
+    try:
+        price = float(d.get("price")) if d.get("price") not in (None, "") else None
+    except Exception:
+        price = None
+    if price is not None and not (0 < price < 20000):
+        price = None
+    # Keep a link only to a site Google Search really returned (the model can make up addresses).
+    hosts = [((c.get("web") or {}).get("title") or "").lower() for c in ((cand.get("groundingMetadata") or {}).get("groundingChunks") or [])]
+    link = str(d.get("url") or "")
+    host = urllib.parse.urlparse(link).hostname or ""
+    host = host.lower().removeprefix("www.")
+    if not (link.startswith("http") and host and any(h and (h.removeprefix("www.") in host or host in h) for h in hosts)):
+        link = ("https://" + hosts[0]) if hosts and hosts[0] and "." in hosts[0] else ""
+        d["store"] = hosts[0] if link else d.get("store")
+    return {"name": name, "price": round(price, 2) if price is not None else None, "unit": str(d.get("unit") or "")[:60],
+            "store": str(d.get("store") or "")[:60], "src": link[:500], "by": "ai"}
+
+
+PRICE_MODEL = "gemini-2.5-flash"
+
+
 class Sync:
     """One connection to Firestore and Drive, used for a single sync or for a watch."""
 
@@ -807,6 +860,43 @@ class Sync:
                     print("Boger reminder failed:", e)
                 d.reference.set({key: True}, merge=True)
 
+    def find_prices(self, limit=25):
+        """Look up the price of equipment items that have none yet (each item once; a failed one is tried again after a day)."""
+        if not os.environ.get("GEMINI_API_KEY"):
+            return
+        ref = self.db.collection("config").document("prices")
+        snap = ref.get()
+        known = ((snap.to_dict() or {}).get("items") or {}) if snap.exists else {}
+        now = time.time()
+        todo = {}
+        for d in self.db.collection("gear").stream():
+            for it in ((d.to_dict() or {}).get("items") or []):
+                name = re.sub(r"\s+", " ", str(it.get("name") or "")).strip()
+                k = price_key(name)
+                if not k or k in todo:
+                    continue
+                p = known.get(k)
+                if p and (p.get("by") == "manual" or p.get("price") is not None or p.get("tries", 0) >= 3 or now - p.get("t", 0) < 86400):
+                    continue
+                todo[k] = (name, (p or {}).get("tries", 0))
+        for i, (k, (name, tries)) in enumerate(list(todo.items())[:limit]):
+            try:
+                r = ask_price(k, name)
+            except Exception as e:
+                msg = str(e)
+                print("Price lookup failed:", name, msg[:200])
+                if "429" in msg:  # the free daily quota is used up: try again later
+                    return
+                r = None
+            entry = r if r and r.get("price") is not None else {"name": name, "price": None, "by": "ai"}
+            entry["t"] = now
+            entry["tries"] = tries + 1
+            if entry.get("price") is not None:
+                entry["tries"] = 0
+            ref.set({"items": {k: entry}}, merge=True)
+            print("Price", name, "->", entry.get("price"), entry.get("store", ""))
+            time.sleep(7)  # stay under the free per-minute limit
+
     def push_gear(self, docs):
         """Notifications about equipment: a new request to the direct manager, an answer to the one who asked."""
         tokens = {}
@@ -866,6 +956,7 @@ class Sync:
         end = time.time() + minutes * 60
         last_drive = time.time()
         last_remind = 0
+        last_price = time.time() - 840
         while time.time() < end:
             time.sleep(1.5)
             try:
@@ -878,6 +969,13 @@ class Sync:
                 if flags["gear"].is_set():
                     flags["gear"].clear()
                     self.push_gear(state["gear"])
+                    last_price = 0
+                if time.time() - last_price >= 900:
+                    last_price = time.time()
+                    try:
+                        self.find_prices()
+                    except Exception as e:
+                        print("Prices skipped:", e)
                 if flags["ops"].is_set():
                     flags["ops"].clear()
                     time.sleep(1)  # let a burst of edits arrive together
