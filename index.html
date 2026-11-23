@@ -42,7 +42,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <meta name="theme-color" content="#ffe9d2">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="forum.css?v=50">
+<link rel="stylesheet" href="forum.css?v=51">
 <script>
 /* Set the theme before the page paints so a dark choice never flashes light first. */
 (function () {
@@ -770,7 +770,7 @@ var ALIASES = [
   ["טיול פסח שבטי", "פסח שבטי"],
   ["יום צופה", "טיול דרגה"]
 ];
-var VERSION = "v3.3";
+var VERSION = "v3.4";
 var IS_TEST = /\/test\/(index\.html)?$/.test(location.pathname);
 if (IS_TEST) { VERSION += " · בדיקות"; (function () { var b = document.createElement("div"); b.className = "test-ribbon"; b.textContent = "סביבת בדיקות"; document.body.appendChild(b); })(); }
 /* Pull down from the top of the screen to refresh, like a regular phone app. */
@@ -1494,7 +1494,10 @@ function openPreview(d) {
   var freshSet = {}, nFresh = 0, newOnly = false, goneOnly = false;
   /* Cancellations accumulate across reports; the ones from the latest report are flagged as new (24 hours, or until the next report), newest first. */
   var goneNewSet = {};
-  (Array.isArray(d.removedNew) && isRecent(d.updatedAt) ? d.removedNew : []).forEach(function (k) { goneNewSet[k] = true; });
+  /* Once this user has looked at the cancellations of this report (opened "ביטלו" and closed the report), they are no longer new for them. */
+  var goneKey = "goneSeen:" + (state.me || "") + ":" + d.name, goneStamp = String(tsMs(d.updatedAt)), goneSeen = false;
+  try { goneSeen = localStorage.getItem(goneKey) === goneStamp; } catch (e) {}
+  (Array.isArray(d.removedNew) && isRecent(d.updatedAt) && !goneSeen ? d.removedNew : []).forEach(function (k) { goneNewSet[k] = true; });
   var goneAll = (Array.isArray(d.removed) ? d.removed : []).map(function (k) { return { k: String(k), n: !!goneNewSet[k] }; });
   goneAll = goneAll.filter(function (g) { return g.n; }).concat(goneAll.filter(function (g) { return !g.n; }));
   var goneList = goneAll.map(function (g) { var a = g.k.split("|"); a.isNew = g.n; return a; }), nGone = goneList.length, nGoneNew = goneList.filter(function (g) { return g.isNew; }).length;
@@ -1525,7 +1528,7 @@ function openPreview(d) {
       /* "הכל" clears everything; grades toggle and can be combined; "חדשים" / "ביטלו" are one or the other. */
       if (g === "") { grades = []; newOnly = false; goneOnly = false; }
       else if (isNew) { newOnly = !newOnly; if (newOnly) goneOnly = false; }
-      else if (isGone) { goneOnly = !goneOnly; if (goneOnly) newOnly = false; }
+      else if (isGone) { goneOnly = !goneOnly; if (goneOnly) { newOnly = false; if (nGoneNew) pvGoneKey = [goneKey, goneStamp]; } }
       else { var i = grades.indexOf(g); if (i === -1) grades.push(g); else grades.splice(i, 1); }
       syncChips(); applyFilter(); prepareGrade();
       c.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -1585,7 +1588,7 @@ function openPreview(d) {
   wrap.appendChild(t);
   wrap.classList.toggle("marks", marks && nFresh > 0);
   wrap.classList.toggle("tagged", marks && nFresh > 0); headRow.classList.toggle("tagged", marks && nFresh > 0); setCols(marks && nFresh > 0);
-  pvFreshKey = nFresh ? [freshKey, freshStamp] : null;
+  pvFreshKey = nFresh ? [freshKey, freshStamp] : null; pvGoneKey = null;
   var none = document.createElement("p"); none.className = "note pv-none"; none.textContent = "לא נמצאו תוצאות."; none.hidden = true;
   wrap.appendChild(none);
   var total = rows.length ? rows.length - 1 : 0;
@@ -1673,11 +1676,12 @@ function openPreview(d) {
   if (!canShareHere() && window.matchMedia && !matchMedia("(pointer: coarse)").matches) { if (rows.length > 8) si.focus(); else x.focus(); }
   else x.focus({ preventScroll: true });
 }
-var pvFreshKey = null;
+var pvFreshKey = null, pvGoneKey = null;
 function closePreview(instant) {
   var ov = $("pvOverlay");
   if (!ov) return;
   if (pvFreshKey) { try { localStorage.setItem(pvFreshKey[0], pvFreshKey[1]); } catch (e) {} pvFreshKey = null; }
+  if (pvGoneKey) { try { localStorage.setItem(pvGoneKey[0], pvGoneKey[1]); } catch (e) {} pvGoneKey = null; }
   document.documentElement.classList.remove("pv-open");
   var back = previewReturn; previewReturn = null;
   if (instant) { ov.remove(); return; }
