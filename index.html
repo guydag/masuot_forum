@@ -770,7 +770,7 @@ var ALIASES = [
   ["טיול פסח שבטי", "פסח שבטי"],
   ["יום צופה", "טיול דרגה"]
 ];
-var VERSION = "v3.4";
+var VERSION = "v3.5";
 var IS_TEST = /\/test\/(index\.html)?$/.test(location.pathname);
 if (IS_TEST) { VERSION += " · בדיקות"; (function () { var b = document.createElement("div"); b.className = "test-ribbon"; b.textContent = "סביבת בדיקות"; document.body.appendChild(b); })(); }
 /* Pull down from the top of the screen to refresh, like a regular phone app. */
@@ -1677,6 +1677,15 @@ function openPreview(d) {
   else x.focus({ preventScroll: true });
 }
 var pvFreshKey = null, pvGoneKey = null;
+/* Copying from a report's table: cells of a row are joined with a space (not a tab), so "איתי אדרעי" pastes as a name. */
+document.addEventListener("copy", function (e) {
+  var sel = window.getSelection && window.getSelection();
+  if (!sel || !sel.rangeCount || !e.clipboardData) return;
+  var n = sel.anchorNode, el = n && (n.nodeType === 1 ? n : n.parentElement);
+  if (!el || !el.closest || !el.closest("#pvOverlay .pv-table")) return;
+  var t = sel.toString().replace(/[ \t]*\t[ \t]*/g, " ").replace(/ +\n/g, "\n").replace(/\n +/g, "\n").trim();
+  e.clipboardData.setData("text/plain", t); e.preventDefault();
+});
 function closePreview(instant) {
   var ov = $("pvOverlay");
   if (!ov) return;
