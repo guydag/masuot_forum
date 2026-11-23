@@ -651,20 +651,37 @@ def price_key(name):
 
 
 def gemini(prompt, schema=None, search=False):
-    """One request to Gemini (free tier). Returns the text of the answer and the raw first candidate."""
+    """One request to Gemini (free tier). Returns the text of the answer and the raw first candidate.
+    Google retires models for new keys without warning (they answer 404), so it tries a short list of current
+    models and keeps the first one that answers."""
     import urllib.request
+    import urllib.error
+    global PRICE_MODEL
     body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.3}}
     if search:
         body["tools"] = [{"google_search": {}}]
     if schema:
         body["generationConfig"].update({"responseMimeType": "application/json", "responseSchema": schema})
-    url = "https://generativelanguage.googleapis.com/v1beta/models/" + PRICE_MODEL + ":generateContent"
-    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json", "x-goog-api-key": os.environ["GEMINI_API_KEY"]})
-    with urllib.request.urlopen(req, timeout=90) as r:
-        res = json.loads(r.read().decode())
-    cand = (res.get("candidates") or [{}])[0]
-    return "".join(p.get("text", "") for p in ((cand.get("content") or {}).get("parts") or [])), cand
-
+    models = [PRICE_MODEL] + [m for m in GEMINI_MODELS if m != PRICE_MODEL]
+    last = None
+    for model in models:
+        url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent"
+        req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json", "x-goog-api-key": os.environ["GEMINI_API_KEY"]})
+        try:
+            with urllib.request.urlopen(req, timeout=90) as r:
+                res = json.loads(r.read().decode())
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code in (404, 400):  # this model isn't served to this key (or can't do this): try the next
+                print("Gemini", model, "->", e.code, e.read().decode(errors="ignore")[:200])
+                continue
+            raise
+        if model != PRICE_MODEL:
+            print("Gemini model now", model)
+            PRICE_MODEL = model
+        cand = (res.get("candidates") or [{}])[0]
+        return "".join(p.get("text", "") for p in ((cand.get("content") or {}).get("parts") or [])), cand
+    raise last
 
 def ask_price(key, name):
     """Gemini (free tier) with Google Search: the usual price in Israel of one unit of the item. Returns a dict or None."""
@@ -677,14 +694,7 @@ def ask_price(key, name):
         "ענה רק ב-JSON בשורה אחת, בלי שום טקסט נוסף: "
         "{\"price\": מספר או null, \"unit\": \"על מה המחיר, בקצרה\", \"store\": \"שם החנות או האתר\", \"url\": \"קישור לעמוד המוצר\"}"
     )
-    body = json.dumps({"contents": [{"parts": [{"text": prompt}]}], "tools": [{"google_search": {}}],
-                       "generationConfig": {"temperature": 0.1}}).encode()
-    url = ("https://generativelanguage.googleapis.com/v1beta/models/" + PRICE_MODEL + ":generateContent")
-    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json", "x-goog-api-key": os.environ["GEMINI_API_KEY"]})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        res = json.loads(r.read().decode())
-    cand = (res.get("candidates") or [{}])[0]
-    text = "".join(p.get("text", "") for p in ((cand.get("content") or {}).get("parts") or []))
+    text, cand = gemini(prompt, search=True)
     m = re.search(r"\{.*\}", text, re.S)
     if not m:
         return None
@@ -710,7 +720,8 @@ def ask_price(key, name):
             "store": str(d.get("store") or "")[:60], "src": link[:500], "by": "ai"}
 
 
-PRICE_MODEL = "gemini-2.5-flash"
+GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-3-flash-preview", "gemini-2.5-flash"]
+PRICE_MODEL = GEMINI_MODELS[0]
 
 
 class Sync:
