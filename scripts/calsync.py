@@ -11,6 +11,7 @@ Local test:  python3 scripts/calsync.py --file luz.xlsx [--ops ops.json] [--out 
 """
 import io
 import json
+from collections import Counter
 import os
 import re
 import sys
@@ -649,6 +650,22 @@ def price_key(name):
     return re.sub(r"[.~*/\[\]`]", "-", k)[:120]
 
 
+def gemini(prompt, schema=None, search=False):
+    """One request to Gemini (free tier). Returns the text of the answer and the raw first candidate."""
+    import urllib.request
+    body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.3}}
+    if search:
+        body["tools"] = [{"google_search": {}}]
+    if schema:
+        body["generationConfig"].update({"responseMimeType": "application/json", "responseSchema": schema})
+    url = "https://generativelanguage.googleapis.com/v1beta/models/" + PRICE_MODEL + ":generateContent"
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json", "x-goog-api-key": os.environ["GEMINI_API_KEY"]})
+    with urllib.request.urlopen(req, timeout=90) as r:
+        res = json.loads(r.read().decode())
+    cand = (res.get("candidates") or [{}])[0]
+    return "".join(p.get("text", "") for p in ((cand.get("content") or {}).get("parts") or [])), cand
+
+
 def ask_price(key, name):
     """Gemini (free tier) with Google Search: the usual price in Israel of one unit of the item. Returns a dict or None."""
     import urllib.request
@@ -860,6 +877,109 @@ class Sync:
                     print("Boger reminder failed:", e)
                 d.reference.set({key: True}, merge=True)
 
+    def period_stats(self, frm, to, pfrm, pto, today):
+        """Counts only (no names of people) between two dates (inclusive), for the summary in words:
+        the calendar, bookings, equipment and site use, with the period before it for comparison."""
+        inr = lambda d, a, b: bool(d) and a <= d[:10] <= b
+        st = {"from": frm, "to": to, "today": today}
+        snap = self.db.collection("cal").document("all").get()
+        evs = json.loads((snap.to_dict() or {}).get("events") or "[]") if snap.exists else []
+        cur = [e for e in evs if inr(str(e.get("date", "")), frm, to)]
+        st["calendar"] = {"events": len(cur), "events_period_before": sum(1 for e in evs if inr(str(e.get("date", "")), pfrm, pto)),
+                          "by_category": Counter(e.get("cat") or "בלי קטגוריה" for e in cur).most_common(8),
+                          "titles": sorted({(e.get("title") or "").strip()[:60] for e in cur if (e.get("title") or "").strip()})[:25]}
+        names = {"fire": "איזור אש", "out": "פעילות מחוץ לשבט"}
+        bk, gap = [], []
+        week = (dt.date.fromisoformat(today) + dt.timedelta(days=7)).isoformat()
+        for d in self.db.collection("bookings").stream():
+            b = d.to_dict() or {}
+            day = str(b.get("date") or "")
+            f = b.get("fields") or {}
+            if inr(day, frm, to):
+                bk.append(b)
+            if today <= day <= week and b.get("area") in names and not (f.get("boger") or "").strip() and not b.get("imported"):
+                gap.append(f.get("unit") or "בלי גדוד")
+        st["bookings"] = {"in_period": len(bk), "by_area": Counter(b.get("areaName") or b.get("area") or "" for b in bk).most_common(6),
+                          "coming_7_days_without_boger": gap}
+        gear, waits, old = [], [], 0
+        now = time.time()
+        day_of = lambda t: dt.datetime.fromtimestamp(t, dt.timezone(dt.timedelta(hours=2))).date().isoformat()
+        for d in self.db.collection("gear").stream():
+            g = d.to_dict() or {}
+            at = g.get("at")
+            t = at.timestamp() if hasattr(at, "timestamp") else None
+            if t and inr(day_of(t), frm, to):
+                gear.append(g)
+            rv = g.get("review") or {}
+            if t and rv.get("at") and g.get("status") in ("approved", "rejected", "changes") and inr(day_of(rv["at"] / 1000), frm, to):
+                waits.append(max(0, rv["at"] / 1000 - t) / 86400)
+            if g.get("status") == "pending" and t and now - t > 7 * 86400:
+                old += 1
+        units = Counter(g.get("unit") or "בלי גדוד" for g in gear)
+        items = Counter()
+        for g in gear:
+            for it in g.get("items") or []:
+                items[re.sub(r"\s+", " ", str(it.get("name") or "")).strip()] += int(it.get("qty") or 1)
+        st["equipment"] = {"new_requests": len(gear), "by_unit": units.most_common(8),
+                           "top_items": items.most_common(8), "average_days_to_answer": round(sum(waits) / len(waits), 1) if waits else None,
+                           "pending_more_than_7_days_now": old}
+        roles = {d.id: (d.to_dict() or {}).get("role") or "" for d in self.db.collection("users").stream()}
+        act = set()
+        for d in self.db.collection("usage").where("day", ">=", frm).stream():
+            u = d.to_dict() or {}
+            if inr(str(u.get("day", "")), frm, to):
+                act.add(u.get("email"))
+        st["site"] = {"users": len(roles), "active_in_period": len(act), "active_by_role": Counter(roles.get(e, "") or "לא ידוע" for e in act).most_common(8)}
+        return st
+
+    def summaries(self):
+        """In words, kept in config/summary: every Sunday (from 06:00) the week that ended, and on the 1st of the month
+        the month that ended. The first time, the last full week right away."""
+        if not os.environ.get("GEMINI_API_KEY"):
+            return
+        from zoneinfo import ZoneInfo
+        now = dt.datetime.now(ZoneInfo("Asia/Jerusalem"))
+        if now.hour < 6:
+            return
+        today = now.date()
+        ref = self.db.collection("config").document("summary")
+        snap = ref.get()
+        have = ((snap.to_dict() or {}).get("periods") or {}) if snap.exists else {}
+        todo = []
+        sun = today - dt.timedelta(days=(today.weekday() + 1) % 7)  # this week's Sunday
+        ws, we = sun - dt.timedelta(days=7), sun - dt.timedelta(days=1)
+        if "w" + ws.isoformat() not in have:
+            todo.append(("week", "w" + ws.isoformat(), ws, we, ws - dt.timedelta(days=7), ws - dt.timedelta(days=1)))
+        first = today.replace(day=1)
+        me_ = first - dt.timedelta(days=1)
+        ms = me_.replace(day=1)
+        pme = ms - dt.timedelta(days=1)
+        if "m" + ms.strftime("%Y-%m") not in have and (today.day <= 7 or not have):
+            todo.append(("month", "m" + ms.strftime("%Y-%m"), ms, me_, pme.replace(day=1), pme))
+        schema = {"type": "OBJECT", "properties": {"text": {"type": "STRING"}, "items": {"type": "ARRAY", "items": {"type": "OBJECT",
+                  "properties": {"kind": {"type": "STRING", "enum": ["alert", "watch", "good"]}, "text": {"type": "STRING"}}, "required": ["kind", "text"]}}},
+                  "required": ["text", "items"]}
+        for kind, key, a, b, pa, pb in todo:
+            st = self.period_stats(a.isoformat(), b.isoformat(), pa.isoformat(), pb.isoformat(), today.isoformat())
+            what = "השבוע שעבר (ראשון עד שבת)" if kind == "week" else "החודש שעבר"
+            prompt = (
+                "אתה כותב סיכום קצר של " + what + " לעמוד התובנות של אתר פנימי של שבט צופים (שבט משואות). הקוראים הם מנהלי השבט.\n"
+                "כתוב בעברית טבעית, חמה ועניינית, בלי להמציא שום דבר: השתמש רק במספרים ובשמות שבנתונים. "
+                "השוואה לתקופה שלפני מותרת רק לפי events_period_before, ואל תחשב אחוזים אם אין בסיס להשוואה.\n"
+                "text: פסקה אחת של 2–3 משפטים על איך " + ("השבוע" if kind == "week" else "החודש") + " נראה (אפשר להזכיר אירועים בולטים מהכותרות).\n"
+                "items: עד 3 נקודות קצרות (משפט אחד כל אחת), כל אחת עם kind: alert = משהו שצריך לטפל בו עכשיו (למשל שריונים בשבוע הקרוב בלי בוגר), "
+                "watch = משהו ששווה לשים לב אליו, good = חדשות טובות. אל תכתוב נקודה על משהו שאין בו מה לומר.\n"
+                "הנתונים (JSON):\n" + json.dumps(st, ensure_ascii=False)
+            )
+            out, _ = gemini(prompt, schema)
+            d = json.loads(out)
+            items = [{"kind": i.get("kind") if i.get("kind") in ("alert", "watch", "good") else "watch", "text": str(i.get("text") or "")[:300]}
+                     for i in (d.get("items") or []) if i.get("text")][:3]
+            ref.set({"periods": {key: {"kind": kind, "from": a.isoformat(), "to": b.isoformat(), "text": str(d.get("text") or "")[:1200],
+                                        "items": items, "day": today.isoformat(), "at": self.fs.SERVER_TIMESTAMP}}}, merge=True)
+            print("Summary", key, "written")
+            time.sleep(7)
+
     def find_prices(self, limit=25):
         """Look up the price of equipment items that have none yet (each item once; a failed one is tried again after a day)."""
         if not os.environ.get("GEMINI_API_KEY"):
@@ -957,6 +1077,7 @@ class Sync:
         last_drive = time.time()
         last_remind = 0
         last_price = time.time() - 840
+        last_sum = 0
         while time.time() < end:
             time.sleep(1.5)
             try:
@@ -970,6 +1091,12 @@ class Sync:
                     flags["gear"].clear()
                     self.push_gear(state["gear"])
                     last_price = 0
+                if time.time() - last_sum >= 600:
+                    last_sum = time.time()
+                    try:
+                        self.summaries()
+                    except Exception as e:
+                        print("Summary skipped:", e)
                 if time.time() - last_price >= 900:
                     last_price = time.time()
                     try:
