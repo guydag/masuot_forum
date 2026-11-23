@@ -89,6 +89,11 @@
 /* The top of the screen is the same peach as the status bar (theme-color, and the page color iOS 26 reads), so the two look like one surface.
    The wash stays put while the page scrolls inside body. */
 html { background: var(--wash); }
+/* In a browser (not the installed app) Safari's toolbar floats over the bottom of the page and shows the page canvas
+   around it: keep the canvas white there, like the tab bar, and peach only at the top. */
+@media (display-mode: browser) {
+  html { background: var(--wash) linear-gradient(180deg, var(--wash) 0, var(--wash) 50%, var(--surface) 50%, var(--surface) 100%) no-repeat; background-size: 100% 100%; min-height: 100%; }
+}
 body {
   background: var(--wash) linear-gradient(180deg, var(--wash) 0, var(--bg) 380px, var(--bg) 100%) no-repeat;
   color: var(--fg); font-family: var(--font); font-size: 16px; line-height: 1.55;
