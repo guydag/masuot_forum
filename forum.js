@@ -20,7 +20,8 @@
     manageBookings: function () { return me.admin || isLead(); },
     exportBookings: function () { return me.admin || isLead(); },
     unlimitedBooking: function () { return me.role === "מדריך קורס" || me.admin; },
-    manageLinks: function () { return me.admin; }
+    manageLinks: function () { return me.admin; },
+    insights: function () { return me.admin || me.role === "דרג מתנדב"; }
   };
   F.me = function () { return me; };
 
@@ -399,11 +400,11 @@
   };
   F.syncTabs = function () {
     var t = document.querySelector('.tab[data-area="insights"]');
-    if (t) t.hidden = !(me.admin && window.innerWidth >= 900);
+    if (t) t.hidden = !(can.insights() && window.innerWidth >= 900);
   };
   F.area = ""; F.lastArea = "home";
   F.show = function (area) {
-    if (area === "insights" && me.id && !(me.admin && window.innerWidth >= 900)) { location.replace("#home"); return; }
+    if (area === "insights" && me.id && !(can.insights() && window.innerWidth >= 900)) { location.replace("#home"); return; }
     if (area !== "settings") F.lastArea = area;
     F.area = area;
     document.body.dataset.area = area;
@@ -1963,11 +1964,11 @@
     try {
       var since = new Date(Date.now() - 60 * 864e5).toLocaleDateString("sv-SE");
       var res = await Promise.all([
-        db.collection("usage").where("day", ">=", since).get(),
+        db.collection("usage").where("day", ">=", since).get().catch(function () { Ins.noUsage = true; return []; }),
         db.collection("bookings").get(),
         db.collection("gear").get(),
-        db.collection("cal_ops").get(),
-        db.collection("users").get(),
+        db.collection("cal_ops").get().catch(function () { return []; }),
+        db.collection("users").get().catch(function () { Ins.noUsers = true; return []; }),
         db.collection("config").doc("prices").get().catch(function () { return null; }),
         db.collection("config").doc("summary").get().catch(function () { return null; })
       ]);
@@ -2035,7 +2036,7 @@
       .forEach(function (x) { var r = el("div", "ins-row"); r.appendChild(el("span", "", x[1])); r.appendChild(el("b", x[0] ? "hot" : "", String(x[0]))); miss.appendChild(r); });
     grid.appendChild(miss);
     body.appendChild(grid);
-    body.appendChild(el("p", "note", "המחירים נמצאים בחיפוש אוטומטי בגוגל (פריט חדש מקבל מחיר תוך כרבע שעה), ואפשר לתקן כל מחיר ברשימת המחירים. פריט שעוד אין לו מחיר נספר לפי הערכה. הכניסות נספרות מהאתר החי בלבד."));
+    body.appendChild(el("p", "note", "המחירים נמצאים בחיפוש אוטומטי בגוגל (פריט חדש מקבל מחיר תוך כרבע שעה)" + (me.admin ? ", ואפשר לתקן כל מחיר ברשימת המחירים" : "") + ". פריט שעוד אין לו מחיר נספר לפי הערכה. הכניסות נספרות מהאתר החי בלבד." + (Ins.noUsage || Ins.noUsers ? " חלק מהנתונים (כניסות ושמות משתמשים) זמינים כרגע רק למנהלים." : "")));
   };
   /* The week (every Sunday) and the month (on the 1st) in words, written by the sync (Gemini) from the site's counts.
      The newest is shown; older ones can be browsed. */
@@ -2081,8 +2082,8 @@
       else if (u && u.est) src.textContent = "הערכה";
       else src.textContent = "עוד אין מחיר";
       row.appendChild(src);
-      var b = el("button", "ins-pv", u ? "₪" + (+u.p).toLocaleString("he-IL", { minimumFractionDigits: u.p % 1 ? 2 : 0, maximumFractionDigits: 2 }) : "—"); b.type = "button"; b.setAttribute("aria-label", "תיקון המחיר של " + n);
-      b.onclick = function () {
+      var b = el(me.admin ? "button" : "span", "ins-pv", u ? "₪" + (+u.p).toLocaleString("he-IL", { minimumFractionDigits: u.p % 1 ? 2 : 0, maximumFractionDigits: 2 }) : "—"); if (me.admin) { b.type = "button"; b.setAttribute("aria-label", "תיקון המחיר של " + n); }
+      if (me.admin) b.onclick = function () {
         var inp = el("input", "ins-pin"); inp.type = "number"; inp.min = "0"; inp.step = "0.1"; inp.inputMode = "decimal"; inp.value = u ? +u.p.toFixed(2) : ""; inp.dir = "ltr";
         b.replaceWith(inp); inp.focus(); inp.select();
         var done = false, save = async function (ok) {
@@ -2097,7 +2098,7 @@
       };
       row.appendChild(b); list.appendChild(row);
     });
-    p.appendChild(el("small", "ins-phint", "המחיר הוא ליחידה אחת. לחיצה על מחיר מאפשרת לתקן אותו."));
+    p.appendChild(el("small", "ins-phint", "המחיר הוא ליחידה אחת." + (me.admin ? " לחיצה על מחיר מאפשרת לתקן אותו." : "")));
     return p;
   }
   function bars(title, rows, max, unit) {
