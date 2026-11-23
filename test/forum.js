@@ -54,6 +54,8 @@
     copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
     dl: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/>',
     excel: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 12l4 5M13 12l-4 5"/>',
+    sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
+    trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
     calplus: '<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M12 12.5v5M9.5 15h5"/>',
     google: '<path d="M21 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h5a4.3 4.3 0 0 1-1.9 2.8v2.3h3A9 9 0 0 0 21 12.2z"/><path d="M12 21c2.4 0 4.5-.8 6-2.2l-3-2.3a5.4 5.4 0 0 1-8-2.8H4v2.4A9 9 0 0 0 12 21z"/><path d="M7 13.7a5.4 5.4 0 0 1 0-3.4V7.9H4a9 9 0 0 0 0 8.2z"/><path d="M12 6.6c1.3 0 2.5.5 3.5 1.4l2.6-2.6A9 9 0 0 0 4 7.9l3 2.4a5.4 5.4 0 0 1 5-3.7z"/>',
     img: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 16l-5-5-9 9"/>'
@@ -1966,8 +1968,10 @@
         db.collection("gear").get(),
         db.collection("cal_ops").get(),
         db.collection("users").get(),
-        db.collection("config").doc("prices").get().catch(function () { return null; })
+        db.collection("config").doc("prices").get().catch(function () { return null; }),
+        db.collection("config").doc("summary").get().catch(function () { return null; })
       ]);
+      Ins.sums = (res[6] && res[6].exists && res[6].data().periods) || {};
       FOUND = (res[5] && res[5].exists && res[5].data().items) || {};
       var usage = [], books = [], gear = [], ops = [], users = {};
       res[0].forEach(function (d) { usage.push(d.data()); });
@@ -2006,6 +2010,7 @@
     kpi(opens, "כניסות ב-30 יום", "#579bfc", devices.phone + " ימי שימוש מטלפון · " + devices.desktop + " ממחשב");
     kpi(books.filter(function (b) { return !b.imported; }).length, "שריונים באתר", "#00c875");
     kpi("₪" + Math.round(gearCost).toLocaleString("he-IL"), "עלות משוערת של ציוד מרכז", "#e2445c", gear.length + " בקשות" + (unknown ? " · " + unknown + " פריטים בלי מחיר" : ""));
+    var sum = summaryCard(); if (sum) body.appendChild(sum);
     body.appendChild(k);
     var grid = el("div", "ins-grid");
     var AREA_N = { home: "בית", cal: "לו״ז", book: "שריונים", gear: "ציוד מרכז", reg: "רשומים", links: "קישורים", settings: "הגדרות", insights: "תובנות" };
@@ -2032,6 +2037,35 @@
     body.appendChild(grid);
     body.appendChild(el("p", "note", "המחירים נמצאים בחיפוש אוטומטי בגוגל (פריט חדש מקבל מחיר תוך כרבע שעה), ואפשר לתקן כל מחיר ברשימת המחירים. פריט שעוד אין לו מחיר נספר לפי הערכה. הכניסות נספרות מהאתר החי בלבד."));
   };
+  /* The week (every Sunday) and the month (on the 1st) in words, written by the sync (Gemini) from the site's counts.
+     The newest is shown; older ones can be browsed. */
+  var HEB_M = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+  function summaryCard() {
+    var all = Ins.sums || {};
+    var keys = Object.keys(all).filter(function (k) { return all[k] && all[k].text && all[k].to; })
+      .sort(function (a, b) { return all[a].to < all[b].to ? -1 : all[a].to > all[b].to ? 1 : (all[a].kind === "month") - (all[b].kind === "month"); });
+    if (!keys.length) return null;
+    if (keys.indexOf(Ins.sumKey) < 0) Ins.sumKey = keys[keys.length - 1];
+    var k = Ins.sumKey, x = all[k], i = keys.indexOf(k), last = i === keys.length - 1;
+    var dm = function (d) { return +d.slice(8) + "." + +d.slice(5, 7); };
+    var title, sub;
+    if (x.kind === "month") { title = HEB_M[+x.from.slice(5, 7) - 1] + (x.from.slice(0, 4) !== String(new Date().getFullYear()) ? " " + x.from.slice(0, 4) : "") + " במילים"; sub = "סיכום חודשי"; }
+    else { title = (last ? "השבוע שעבר" : "השבוע של " + dm(x.from)) + " במילים"; sub = dm(x.from) + "–" + dm(x.to); }
+    var p = el("section", "panel ins-sum" + (x.kind === "month" ? " month" : ""));
+    var h = el("div", "ins-sum-h");
+    var t = el("h3"); t.innerHTML = svg("sparkle", 18); t.appendChild(document.createTextNode(title)); h.appendChild(t);
+    h.appendChild(el("small", "", sub)); p.appendChild(h);
+    p.appendChild(el("p", "ins-sum-t", x.text));
+    var ICON = { alert: "alert", watch: "clock", good: "trend" };
+    (x.items || []).forEach(function (it) { var r = el("div", "ins-sum-i " + (ICON[it.kind] ? it.kind : "watch")); r.innerHTML = svg(ICON[it.kind] || "clock", 16); r.appendChild(el("span", "", it.text)); p.appendChild(r); });
+    var f = el("div", "ins-sum-f"); f.appendChild(el("small", "", "נכתב אוטומטית מנתוני האתר" + (x.day ? " · " + dm(x.day) : "")));
+    var nav = el("div", "ins-sum-nav");
+    var go = function (j) { Ins.sumKey = keys[j]; p.replaceWith(summaryCard()); };
+    if (i > 0) { var b1 = el("button", "linkbtn", "הקודם"); b1.type = "button"; b1.onclick = function () { go(i - 1); }; nav.appendChild(b1); }
+    if (!last) { var b2 = el("button", "linkbtn", "הבא"); b2.type = "button"; b2.onclick = function () { go(i + 1); }; nav.appendChild(b2); }
+    f.appendChild(nav); p.appendChild(f);
+    return p;
+  }
   /* Every requested item with its price and where it came from; a manager can fix a price. */
   function priceList(items) {
     var p = el("section", "panel ins-p ins-prices"); p.appendChild(el("h3", "", "מחירי פריטים"));
