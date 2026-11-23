@@ -62,4 +62,26 @@ async function main() {
   }
   await metaRef.set({ seen: now });
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+/* The Excel sync writes public/health.sync every minute. If it has been quiet for 30 minutes, the managers' phones
+   get one notice (and one more when it is back). The workflow also starts the sync again when none is running. */
+async function checkSync() {
+  const ref = db.collection("public").doc("health");
+  const h = (await ref.get()).data() || {};
+  const at = h.sync && h.sync.toMillis ? h.sync.toMillis() : 0;
+  if (!at) return;
+  const down = Date.now() - at > 30 * 60000;
+  if (down === !!h.down) return;
+  const admins = (await db.collection("admins").get()).docs.map((d) => d.id.toLowerCase());
+  const tokens = [];
+  for (const a of admins) { const s = await db.collection("subs").doc(a).get(); if (s.exists) (s.data().tokens || []).forEach((t) => tokens.push(t)); }
+  const hm = new Date(at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jerusalem" });
+  const note = down
+    ? { title: "הסנכרון עם האקסל נעצר ⚠️", body: "לא פעל מאז " + hm + ". הוא מנסה לחזור לבד; אם זה נמשך, כדאי לבדוק ב-GitHub." }
+    : { title: "הסנכרון עם האקסל חזר לעבוד ✅", body: "שינויים בלו״ז ובאקסל עוברים שוב ביניהם." };
+  console.log("Sync", down ? "down since " + hm : "back", "· notifying", tokens.length, "devices");
+  for (let i = 0; i < tokens.length; i += 500) {
+    await admin.messaging().sendEachForMulticast({ tokens: tokens.slice(i, i + 500), webpush: { notification: Object.assign(note, { icon: SITE + "icon-192.png?v=3", badge: SITE + "icon-192.png?v=3", dir: "rtl", lang: "he" }), fcmOptions: { link: SITE } } }).catch((e) => console.log("push failed", e.message));
+  }
+  await ref.set({ down: down, downNoticeAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+}
+main().then(checkSync).catch((e) => { console.error(e); process.exit(1); });

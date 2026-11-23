@@ -8,6 +8,7 @@ concurrency:
   cancel-in-progress: false
 permissions:
   contents: read
+  actions: write
 jobs:
   notify:
     runs-on: ubuntu-latest
@@ -21,3 +22,12 @@ jobs:
       - run: node scripts/notify.js
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      # If no Excel sync is running or waiting (GitHub sometimes drops the run that should start the next one), start one.
+      - name: Keep the Excel sync running
+        if: always()
+        run: |
+          n=$(gh run list -R "$GITHUB_REPOSITORY" --workflow calsync.yml --json status --jq '[.[] | select(.status=="in_progress" or .status=="queued" or .status=="waiting" or .status=="pending")] | length')
+          echo "running/queued sync runs: $n"
+          if [ "$n" = "0" ]; then gh workflow run calsync.yml --ref main -R "$GITHUB_REPOSITORY"; echo "started the sync"; fi
+        env:
+          GH_TOKEN: ${{ github.token }}
