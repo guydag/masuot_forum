@@ -38,8 +38,9 @@
 <meta name="apple-mobile-web-app-title" content="פורום מוביל">
 <meta name="application-name" content="פורום מוביל">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
-<meta name="theme-color" content="#fffaf3">
-<link rel="stylesheet" href="forum.css?v=48">
+<meta name="theme-color" content="#ffe9d2">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="forum.css?v=49">
 <script>
 /* Set the theme before the page paints so a dark choice never flashes light first. */
 (function () {
@@ -85,8 +86,11 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+/* The top of the screen is the same peach as the status bar (theme-color, and the page color iOS 26 reads), so the two look like one surface.
+   The wash stays put while the page scrolls inside body. */
+html { background: var(--wash); }
 body {
-  background: var(--bg) linear-gradient(180deg, var(--wash) 0, var(--bg) 380px) no-repeat;
+  background: var(--wash) linear-gradient(180deg, var(--wash) 0, var(--bg) 380px, var(--bg) 100%) no-repeat;
   color: var(--fg); font-family: var(--font); font-size: 16px; line-height: 1.55;
   padding-block: 44px 48px;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
@@ -1966,7 +1970,7 @@ function applyTheme(mode) {
   /* פורום מוביל is always light, whatever the device or an old saved choice says. */
   var t = "light";
   document.documentElement.setAttribute("data-theme", t);
-  var m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = t === "dark" ? "#1f2430" : "#fffaf3";
+  var m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = t === "dark" ? "#1f2430" : "#ffe9d2";
   Array.prototype.forEach.call(document.querySelectorAll("#themeSeg button"), function (b) { b.setAttribute("aria-checked", String(b.getAttribute("data-mode") === mode)); });
 }
 Array.prototype.forEach.call(document.querySelectorAll("#themeSeg button"), function (b) {
