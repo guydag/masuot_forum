@@ -10,7 +10,8 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 /* The settings page: text there can be selected and copied. */
 body[data-area="settings"] main#app, body[data-area="settings"] main#app *, body[data-area="settings"] #pvOverlay * { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 /* Names in a report's table can be selected and copied. */
-#pvOverlay .pv-table td { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; cursor: text; }
+#pvOverlay .pv-table td { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; cursor: default; }
+#pvOverlay .pv-table td .ct { cursor: text; }
 body[data-area="settings"] main#app button, body[data-area="settings"] main#app img, body[data-area="settings"] main#app svg { -webkit-user-select: none; user-select: none; }
 img, a, svg { -webkit-user-drag: none; user-drag: none; }
 /* No number spinners anywhere. */
