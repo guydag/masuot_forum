@@ -1089,9 +1089,13 @@ class Sync:
         last_remind = 0
         last_price = time.time() - 840
         last_sum = 0
+        last_beat = 0
         while time.time() < end:
             time.sleep(1.5)
             try:
+                if time.time() - last_beat >= 60:  # the site and the notifier check this to see that the sync is alive
+                    last_beat = time.time()
+                    self.db.collection("public").document("health").set({"sync": self.fs.SERVER_TIMESTAMP}, merge=True)
                 if flags["people"].is_set():
                     flags["people"].clear()
                     publish_people(self.db, self.fs, state["users"])

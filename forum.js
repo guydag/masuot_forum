@@ -55,6 +55,7 @@
     copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
     dl: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/>',
     excel: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 12l4 5M13 12l-4 5"/>',
+    "wifi-off": '<path d="M2 8.8a15 15 0 0 1 4.2-2.6M9.9 5.1A15 15 0 0 1 22 8.8M5 12.6a10 10 0 0 1 3.6-2.2M14.5 10.3a10 10 0 0 1 4.5 2.3M8.5 16.4a5 5 0 0 1 5.6-.8"/><path d="M12 20h.01"/><path d="M3 3l18 18"/>',
     sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
     trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
     calplus: '<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M12 12.5v5M9.5 15h5"/>',
@@ -450,11 +451,51 @@
     F.listen(db.collection("org").doc("tree").onSnapshot(function (s) { Org.map = (s.exists && s.data().map) || {}; Org.loaded = true; Gear.changed(); }, function () { Org.loaded = true; }));
     F.listen(db.collection("public").doc("units").onSnapshot(function (s) { Units.list = (s.exists && s.data().list) || []; if (F.area === "settings") Settings.render(); }, function () {}));
     Cal.start(); Book.start(); Gear.start(); Links.start();
+    /* Managers see a notice when the Excel sync has not reported in for a while (it writes public/health every minute). */
+    if (me.admin) F.listen(db.collection("public").doc("health").onSnapshot(function (s) { Notice.syncAt = s.exists && s.data().sync && s.data().sync.toMillis ? s.data().sync.toMillis() : 0; Notice.checkSync(); }, function () {}));
     /* Reports: reload the list when a new report is published. */
     var first = true;
     F.listen(db.collection("factories").orderBy("updatedAt", "desc").limit(1).onSnapshot(function () { if (first) { first = false; return; } if (typeof window.loadSaved === "function") window.loadSaved(); }, function () {}));
   };
   F.refresh = function () { return Promise.resolve(); };
+
+  /* Notices at the top of the screen that the user can close: no connection (the data shown is what the device kept),
+     and, for managers, an Excel sync that stopped. A closed notice comes back only when its situation changes. */
+  var Notice = F.Notice = {
+    box: null, shut: {},
+    show: function (id, kind, icon, title, text) {
+      if (Notice.shut[id] === text) return;
+      if (!Notice.box) { Notice.box = el("div", "notices"); Notice.box.setAttribute("role", "status"); document.body.appendChild(Notice.box); }
+      var n = Notice.box.querySelector('[data-id="' + id + '"]');
+      if (!n) { n = el("div", "notice " + kind); n.dataset.id = id; Notice.box.appendChild(n); }
+      n.innerHTML = "";
+      var ic = el("span", "nt-ic"); ic.innerHTML = svg(icon, 18); n.appendChild(ic);
+      var tx = el("div", "nt-tx"); tx.appendChild(el("b", "", title)); tx.appendChild(el("span", "", text)); n.appendChild(tx);
+      var x = el("button", "nt-x"); x.type = "button"; x.setAttribute("aria-label", "סגירה"); x.innerHTML = svg("x", 16);
+      x.onclick = function () { Notice.shut[id] = text; Notice.hide(id); }; n.appendChild(x);
+    },
+    hide: function (id) { var n = Notice.box && Notice.box.querySelector('[data-id="' + id + '"]'); if (n) n.remove(); },
+    hm: function (t) { var d = new Date(t), today = new Date(); var s = d.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }); return d.toDateString() === today.toDateString() ? s : d.getDate() + "." + (d.getMonth() + 1) + " " + s; },
+    /* While online the time is remembered, so offline we can say how old the data is. */
+    lastOnline: function () { try { return +localStorage.getItem("lastOnlineAt") || 0; } catch (e) { return 0; } },
+    markOnline: function () { try { localStorage.setItem("lastOnlineAt", String(Date.now())); } catch (e) {} },
+    checkNet: function () {
+      if (navigator.onLine) { Notice.markOnline(); if (Notice.wasOff) { Notice.wasOff = false; Notice.hide("off"); toast("החיבור חזר, הנתונים מתעדכנים"); } Notice.shut.off = null; Notice.checkSync(); return; }
+      Notice.wasOff = true; Notice.hide("sync");
+      var t = Notice.lastOnline();
+      Notice.show("off", "warn", "wifi-off", "אין חיבור לאינטרנט",
+        "מוצגים הנתונים" + (t ? " מ-" + Notice.hm(t) : " האחרונים") + " וייתכן שהם לא מעודכנים. שינויים יישמרו כשהחיבור יחזור.");
+    },
+    syncAt: 0,
+    checkSync: function () {
+      if (!me.admin || !Notice.syncAt) { Notice.hide("sync"); return; }
+      if (Date.now() - Notice.syncAt > 30 * 60000 && navigator.onLine) Notice.show("sync", "err", "alert", "הסנכרון עם האקסל לא פועל", "לא פעל מאז " + Notice.hm(Notice.syncAt) + ", אז שינויים לא עוברים בין הלו״ז לאקסל. הוא מנסה לחזור לבד.");
+      else Notice.hide("sync");
+    }
+  };
+  window.addEventListener("online", Notice.checkNet); window.addEventListener("offline", Notice.checkNet);
+  setInterval(function () { if (navigator.onLine) Notice.markOnline(); Notice.checkSync(); }, 60000);
+  setTimeout(Notice.checkNet, 800);
 
   /* ======================================================================
      Home: an overview of the other areas (like the home page of גאנט׳)

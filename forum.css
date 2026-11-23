@@ -647,3 +647,14 @@ body.drag-out { cursor: not-allowed; }
 .ins-sum-nav { display: flex; gap: 14px; }
 .ins-sum-nav .linkbtn { background: none; border: 0; padding: 0; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--accent); cursor: pointer; }
 .ins-sum-nav .linkbtn:hover { text-decoration: underline; }
+/* Notices at the top (no connection, sync stopped): below the status bar on a phone, top centre on a computer. */
+.notices { position: fixed; z-index: 250; top: calc(10px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 20px)); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.notice { pointer-events: auto; display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px 11px 8px; border-radius: 14px; box-shadow: 0 6px 24px rgba(42, 31, 27, .14); border: 1px solid; animation: fade .2s ease both; direction: rtl; }
+.notice.warn { background: #fff7e6; border-color: #f3d79b; color: #6b4300; }
+.notice.err { background: #fdecea; border-color: #f5c2bd; color: #8e1b14; }
+.notice .nt-ic { flex: none; margin-top: 1px; display: flex; }
+.notice .nt-tx { flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.55; }
+.notice .nt-tx b { display: block; font-size: 14px; margin-bottom: 1px; }
+.notice .nt-x { flex: none; background: none; border: 0; padding: 4px; border-radius: 8px; cursor: pointer; color: inherit; opacity: .7; display: flex; }
+.notice .nt-x:hover { opacity: 1; background: rgba(0, 0, 0, .06); }
+@media (min-width: 900px) { .notices { top: auto; bottom: 22px; left: 24px; transform: none; width: 440px; } }

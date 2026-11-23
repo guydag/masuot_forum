@@ -29,4 +29,35 @@ self.addEventListener("notificationclick", function (event) {
   }));
 });
 
+/* Offline: the site's own files and the libraries it loads are kept as they come in (network first),
+   so with no connection the app still opens; the data itself comes from Firestore's own cache on the device. */
+var OFF_CACHE = "forum-offline-v1";
+var OFF_HOSTS = ["www.gstatic.com", "cdnjs.cloudflare.com", "fonts.googleapis.com", "fonts.gstatic.com"];
+self.addEventListener("install", function () { self.skipWaiting(); });
+self.addEventListener("activate", function (event) { event.waitUntil(self.clients.claim()); });
+self.addEventListener("fetch", function (event) {
+  var req = event.request;
+  if (req.method !== "GET") return;
+  var url = new URL(req.url);
+  var mine = url.origin === self.location.origin && url.pathname.indexOf(new URL(self.registration.scope).pathname) === 0;
+  if (!mine && OFF_HOSTS.indexOf(url.hostname) === -1) return;
+  if (mine && /firebase-messaging-sw\.js$/.test(url.pathname)) return;
+  event.respondWith(fetch(req).then(function (res) {
+    if (res && (res.ok || res.type === "opaque")) { var copy = res.clone(); caches.open(OFF_CACHE).then(function (c) { c.put(req, copy); }); }
+    return res;
+  }).catch(function () {
+    return caches.open(OFF_CACHE).then(function (c) {
+      return c.match(req).then(function (hit) {
+        if (hit) return hit;
+        /* A page or file asked for with a different ?v= or #: fall back to the same path. */
+        return c.match(req, { ignoreSearch: true }).then(function (h2) {
+          if (h2) return h2;
+          if (req.mode === "navigate") return c.match(new URL("index.html", self.registration.scope).href, { ignoreSearch: true });
+          return Response.error();
+        });
+      });
+    });
+  }));
+});
+
 firebase.messaging();
