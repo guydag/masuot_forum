@@ -509,7 +509,7 @@ footer .version { margin-top: 4px; }
 .upd-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 50; display: flex; align-items: center; gap: 14px; background: var(--fg); color: var(--bg); padding: 10px 10px 10px 16px; border-radius: 99px; font-size: 14px; box-shadow: var(--shadow); white-space: nowrap; }
 .upd-bar button { font: inherit; font-weight: 700; border: 0; border-radius: 99px; padding: 6px 14px; background: var(--accent); color: var(--accent-fg); cursor: pointer; }
 /* Loading polish: a calm splash while sign-in resolves, shimmering placeholders for the list, and a soft fade-in. */
-#splash { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: var(--bg) linear-gradient(180deg, var(--wash) 0, var(--bg) 380px) no-repeat; transition: opacity .3s ease; }
+#splash { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: var(--wash) linear-gradient(180deg, var(--wash) 0, var(--bg) 380px, var(--bg) 100%) no-repeat; transition: opacity .3s ease; }
 #splash.out { opacity: 0; pointer-events: none; }
 #splash.out .sp-mark { transform: scale(1.06); }
 .sp-mark { position: relative; width: 148px; height: 148px; transition: transform .3s ease; animation: breathe 2.2s ease-in-out infinite; }
