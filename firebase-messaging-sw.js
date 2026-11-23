@@ -33,6 +33,8 @@ self.addEventListener("notificationclick", function (event) {
    so with no connection the app still opens; the data itself comes from Firestore's own cache on the device. */
 var OFF_CACHE = "forum-offline-v1";
 var OFF_HOSTS = ["www.gstatic.com", "cdnjs.cloudflare.com", "fonts.googleapis.com", "fonts.gstatic.com"];
+/* Also the small site icons shown next to the links (Google's favicon service). */
+function offAllowed(url) { return OFF_HOSTS.indexOf(url.hostname) !== -1 || (url.hostname === "www.google.com" && url.pathname.indexOf("/s2/favicons") === 0) || /^t\d\.gstatic\.com$/.test(url.hostname); }
 self.addEventListener("install", function () { self.skipWaiting(); });
 self.addEventListener("activate", function (event) { event.waitUntil(self.clients.claim()); });
 self.addEventListener("fetch", function (event) {
@@ -40,7 +42,7 @@ self.addEventListener("fetch", function (event) {
   if (req.method !== "GET") return;
   var url = new URL(req.url);
   var mine = url.origin === self.location.origin && url.pathname.indexOf(new URL(self.registration.scope).pathname) === 0;
-  if (!mine && OFF_HOSTS.indexOf(url.hostname) === -1) return;
+  if (!mine && !offAllowed(url)) return;
   if (mine && /firebase-messaging-sw\.js$/.test(url.pathname)) return;
   event.respondWith(fetch(req).then(function (res) {
     if (res && (res.ok || res.type === "opaque")) { var copy = res.clone(); caches.open(OFF_CACHE).then(function (c) { c.put(req, copy); }); }
@@ -57,6 +59,29 @@ self.addEventListener("fetch", function (event) {
         });
       });
     });
+  }));
+});
+
+/* The page sends the list of everything it loaded (fonts, scripts, images): keep any of it not kept yet, so the
+   app looks the same offline. Files that loaded before this worker took over the page would otherwise be missing. */
+self.addEventListener("message", function (event) {
+  var d = event.data || {};
+  if (d.type !== "cache" || !Array.isArray(d.urls)) return;
+  var scope = new URL(self.registration.scope);
+  event.waitUntil(caches.open(OFF_CACHE).then(function (c) {
+    return Promise.all(d.urls.slice(0, 200).map(function (u) {
+      var url; try { url = new URL(u); } catch (e) { return null; }
+      var mine = url.origin === scope.origin && url.pathname.indexOf(scope.pathname) === 0;
+      if (!mine && !offAllowed(url)) return null;
+      if (/firebase-messaging-sw\.js$/.test(url.pathname)) return null;
+      return c.match(url.href).then(function (hit) {
+        if (hit) return null;
+        return fetch(url.href, { mode: mine ? "same-origin" : "cors", credentials: "omit" })
+          .catch(function () { return fetch(url.href, { mode: "no-cors" }); })
+          .then(function (res) { if (res && (res.ok || res.type === "opaque")) return c.put(url.href, res); })
+          .catch(function () {});
+      });
+    }));
   }));
 });
 
