@@ -9,6 +9,8 @@ body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none
 input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 /* The settings page: text there can be selected and copied. */
 body[data-area="settings"] main#app, body[data-area="settings"] main#app *, body[data-area="settings"] #pvOverlay * { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+/* Names in a report's table can be selected and copied. */
+#pvOverlay .pv-table td { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; cursor: text; }
 body[data-area="settings"] main#app button, body[data-area="settings"] main#app img, body[data-area="settings"] main#app svg { -webkit-user-select: none; user-select: none; }
 img, a, svg { -webkit-user-drag: none; user-drag: none; }
 /* No number spinners anywhere. */
@@ -629,6 +631,7 @@ body.drag-out { cursor: not-allowed; }
 .ins-pin { width: 84px; font: inherit; padding: 4px 8px; border: 1px solid var(--accent); border-radius: 8px; text-align: left; }
 .ins-phint { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; }
 .ins-sum { margin-bottom: 16px; }
+.ins-sum.month { box-shadow: var(--shadow-sm), inset 0 3px 0 var(--accent); }
 .ins-sum-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
 .ins-sum-h h3 { display: flex; align-items: center; gap: 8px; margin: 0; }
 .ins-sum-h h3 svg { color: var(--accent); }
