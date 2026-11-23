@@ -1968,7 +1968,7 @@
         db.collection("bookings").get(),
         db.collection("gear").get(),
         db.collection("cal_ops").get().catch(function () { return []; }),
-        db.collection("users").get().catch(function () { Ins.noUsers = true; return []; }),
+        me.admin ? db.collection("users").get() : db.collection("org").doc("tree").get().catch(function () { return null; }),
         db.collection("config").doc("prices").get().catch(function () { return null; }),
         db.collection("config").doc("summary").get().catch(function () { return null; })
       ]);
@@ -1979,7 +1979,11 @@
       res[1].forEach(function (d) { books.push(d.data()); });
       res[2].forEach(function (d) { gear.push(d.data()); });
       res[3].forEach(function (d) { ops.push(d.data()); });
-      res[4].forEach(function (d) { users[d.id] = d.data(); });
+      if (me.admin) res[4].forEach(function (d) { users[d.id] = d.data(); });
+      else {  /* a דרג מתנדב reads the org tree (names, roles, units) instead of the user records */
+        var tm = (res[4] && res[4].exists && res[4].data().map) || {};
+        Object.keys(tm).forEach(function (id) { var x = tm[id]; users[id] = { fullName: x.n, role: x.r, unit: x.u, manager: x.m, managerName: x.mn }; });
+      }
       Ins.draw(body, usage, books, gear, ops, users);
     } catch (e) { body.textContent = ""; body.appendChild(el("div", "fv-err", "לא הצלחנו לטעון את הנתונים.")); }
   };
@@ -2036,7 +2040,7 @@
       .forEach(function (x) { var r = el("div", "ins-row"); r.appendChild(el("span", "", x[1])); r.appendChild(el("b", x[0] ? "hot" : "", String(x[0]))); miss.appendChild(r); });
     grid.appendChild(miss);
     body.appendChild(grid);
-    body.appendChild(el("p", "note", "המחירים נמצאים בחיפוש אוטומטי בגוגל (פריט חדש מקבל מחיר תוך כרבע שעה)" + (me.admin ? ", ואפשר לתקן כל מחיר ברשימת המחירים" : "") + ". פריט שעוד אין לו מחיר נספר לפי הערכה. הכניסות נספרות מהאתר החי בלבד." + (Ins.noUsage || Ins.noUsers ? " חלק מהנתונים (כניסות ושמות משתמשים) זמינים כרגע רק למנהלים." : "")));
+    body.appendChild(el("p", "note", "המחירים נמצאים בחיפוש אוטומטי בגוגל (פריט חדש מקבל מחיר תוך כרבע שעה)" + (me.admin ? ", ואפשר לתקן כל מחיר ברשימת המחירים" : "") + ". פריט שעוד אין לו מחיר נספר לפי הערכה. הכניסות נספרות מהאתר החי בלבד." + (Ins.noUsage ? " נתוני הכניסות זמינים כרגע רק למנהלים." : "")));
   };
   /* The week (every Sunday) and the month (on the 1st) in words, written by the sync (Gemini) from the site's counts.
      The newest is shown; older ones can be browsed. */
