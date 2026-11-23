@@ -42,7 +42,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <meta name="theme-color" content="#ffe9d2">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="forum.css?v=51">
+<link rel="stylesheet" href="forum.css?v=52">
 <script>
 /* Set the theme before the page paints so a dark choice never flashes light first. */
 (function () {
@@ -770,7 +770,7 @@ var ALIASES = [
   ["טיול פסח שבטי", "פסח שבטי"],
   ["יום צופה", "טיול דרגה"]
 ];
-var VERSION = "v3.5";
+var VERSION = "v3.6";
 var IS_TEST = /\/test\/(index\.html)?$/.test(location.pathname);
 if (IS_TEST) { VERSION += " · בדיקות"; (function () { var b = document.createElement("div"); b.className = "test-ribbon"; b.textContent = "סביבת בדיקות"; document.body.appendChild(b); })(); }
 /* Pull down from the top of the screen to refresh, like a regular phone app. */
@@ -1570,7 +1570,7 @@ function openPreview(d) {
   var t = mkTable(), tbd = t.createTBody();
   rows.slice(1).forEach(function (r) {
     var tr = document.createElement("tr");
-    r.forEach(function (c) { var td = document.createElement("td"); td.textContent = c; tr.appendChild(td); });
+    r.forEach(function (c) { var td = document.createElement("td"); cellText(td, c); tr.appendChild(td); });
     if (freshSet[personKey(r[0], r[1], r[2])]) {
       tr.className = "fresh";
       tr.cells[tagCell()].className = "tagcell newcell";
@@ -1581,7 +1581,7 @@ function openPreview(d) {
   var fiG = rows.length && rows[0].indexOf("שם פרטי") !== -1 ? rows[0].indexOf("שם פרטי") : 0, liG = rows.length && rows[0].indexOf("שם משפחה") !== -1 ? rows[0].indexOf("שם משפחה") : 1;
   goneList.forEach(function (g) {
     var tr = document.createElement("tr"); tr.className = g.isNew ? "gone gone-new" : "gone"; tr.hidden = true;
-    for (var ci = 0; ci < cols; ci++) { var td = document.createElement("td"); td.textContent = ci === fiG ? g[0] : ci === liG ? g[1] : ci === gi ? g[2] : ""; tr.appendChild(td); }
+    for (var ci = 0; ci < cols; ci++) { var td = document.createElement("td"); cellText(td, ci === fiG ? g[0] : ci === liG ? g[1] : ci === gi ? g[2] : ""); tr.appendChild(td); }
     if (tr.cells[tagCell()]) tr.cells[tagCell()].className = g.isNew ? "tagcell gonecell gone-newcell" : "tagcell gonecell";
     tbd.appendChild(tr);
   });
@@ -1677,6 +1677,8 @@ function openPreview(d) {
   else x.focus({ preventScroll: true });
 }
 var pvFreshKey = null, pvGoneKey = null;
+/* The text of a table cell sits in its own span, so the text cursor shows only over the words themselves. */
+function cellText(td, v) { if (v === "" || v == null) return; var s = document.createElement("span"); s.className = "ct"; s.textContent = v; td.appendChild(s); }
 /* Copying from a report's table: cells of a row are joined with a space (not a tab), so "איתי אדרעי" pastes as a name. */
 document.addEventListener("copy", function (e) {
   var sel = window.getSelection && window.getSelection();
