@@ -9,6 +9,7 @@ concurrency:
   cancel-in-progress: false
 permissions:
   contents: read
+  actions: write
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -25,3 +26,8 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # Start the next watch right away (GitHub's own schedule is often late by a long time).
+      - if: always()
+        run: gh workflow run calsync.yml --ref main -R "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
