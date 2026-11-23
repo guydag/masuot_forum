@@ -17,13 +17,15 @@
 .pv-changes { display: flex; gap: 8px; padding: 2px 0 4px; }
 .pv-table td.tagcell { position: relative; }
 .pv-table.marks td.newcell { padding-inline-end: 40px; }
-.pv-table td.gonecell { padding-inline-end: 72px; }
+.pv-table td.gonecell { padding-inline-end: 50px; }
+.pv-table td.gone-newcell { padding-inline-end: 86px; }
 .pv-table.marks td.newcell::after, .pv-table td.gonecell::after { position: absolute; left: 4px; top: 50%; transform: translateY(-50%); padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .pv-table.marks td.newcell::after { content: "חדש"; background: var(--accent); color: var(--accent-fg); }
-.pv-table td.gonecell::after { content: "ביטל הרשמה"; background: var(--err); color: #fff; }
+.pv-table td.gonecell::after { content: "ביטל"; background: var(--err); color: #fff; }
 .pv-table tr.gone td { background: var(--err-soft); }
-.pv-table tr.gone-new td { font-weight: 800; box-shadow: inset 0 -1px 0 var(--err); }
-.pv-table td.gone-newcell::after { content: "ביטל חדש"; }
+/* A new cancellation: two tags, "ביטל" and an outlined "חדש" (no bold). */
+.pv-table td.gone-newcell::after { left: 42px; }
+.pv-table td.gone-newcell::before { content: "חדש"; position: absolute; left: 4px; top: 50%; transform: translateY(-50%); padding: 0 5px; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; background: var(--surface); color: var(--accent); border: 1px solid var(--accent); }
 .pv-table.tagged td, .pv-headrow.tagged th { padding-inline: 12px; }
 .chip.chg { flex: 1 1 0; justify-content: center; font-weight: 700; }
 .chip.chg-new:not(.on) { color: var(--accent); border-color: var(--accent); }
