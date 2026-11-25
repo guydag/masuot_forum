@@ -532,9 +532,9 @@ def _has_text(sh, c, r):
 
 
 def _plan_week(sh, w):
-    """Which events of one week move up, and to which row: under each date the top rows fill first, the order
-    within a day stays, and an event that covers several days or several rows moves only to a place free on all
-    its days and rows. Cells outside the month's days stay where they are."""
+    """Where the events of one week go: under each date the top rows fill first, with the events that cover several
+    days at the top (each in a place free on all its days and rows), then the others in their order.
+    Cells outside the month's days stay where they are."""
     rows, cols = w["rows"], sorted(w["days"])
     if not rows or not cols:
         return []
@@ -553,23 +553,25 @@ def _plan_week(sh, w):
             elif _has_text(sh, c, r):
                 seen.add((c, r))
                 items.append({"c0": c, "c1": c, "r": r, "h": 1, "fixed": c not in cols, "merge": None})
-    taken, last, moves = set(), {}, []
-    for it in sorted(items, key=lambda x: (x["r"], x["c0"])):
+    # Fixed cells first, then the events that cover the most days (and rows), then the rest in their order:
+    # each goes to the topmost place free on all its days and rows.
+    taken, moves = set(), []
+    for it in sorted(items, key=lambda x: (not x["fixed"], -(x["c1"] - x["c0"] + 1), -x["h"], x["r"], x["c0"])):
         span = range(it["c0"], it["c1"] + 1)
         dest = it["r"]
         if not it["fixed"]:
+            dest = None
             for i, r in enumerate(rows):
-                if r > it["r"]:
-                    break
                 block = rows[i:i + it["h"]]
                 if len(block) == it["h"] and block[-1] - block[0] == it["h"] - 1 and all(
-                        (cc, rr) not in taken and r > last.get(cc, 0) for cc in span for rr in block):
+                        (cc, rr) not in taken for cc in span for rr in block):
                     dest = r
                     break
+            if dest is None:  # no room in this order: leave the week as it is
+                return []
         for cc in span:
             for rr in range(dest, dest + it["h"]):
                 taken.add((cc, rr))
-            last[cc] = max(last.get(cc, 0), dest + it["h"] - 1)
         if dest != it["r"]:
             moves.append((it, dest))
     return moves
