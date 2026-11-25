@@ -26,8 +26,14 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      # Start the next watch right away (GitHub's own schedule is often late by a long time).
+      # Start the next watch right away (GitHub's own schedule is often late by hours). GitHub sometimes answers
+      # this with a passing error (HTTP 500), so it tries again for about 10 minutes before giving up.
       - if: always()
-        run: gh workflow run calsync.yml --ref main -R "$GITHUB_REPOSITORY"
+        run: |
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if gh workflow run calsync.yml --ref main -R "$GITHUB_REPOSITORY"; then echo "next watch started"; exit 0; fi
+            echo "try $i failed, waiting"; sleep $((i * 10))
+          done
+          exit 1
         env:
           GH_TOKEN: ${{ github.token }}
