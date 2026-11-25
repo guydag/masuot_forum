@@ -525,6 +525,95 @@ def edit_event(sheets, legend_rev, op):
     sh.read()
 
 
+# ---------- keeping each day packed: events in the top rows under the date ----------
+def _has_text(sh, c, r):
+    v = sh.value(c, r)
+    return v is not None and str(v).strip() != ""
+
+
+def _plan_week(sh, w):
+    """Which events of one week move up, and to which row: under each date the top rows fill first, the order
+    within a day stays, and an event that covers several days or several rows moves only to a place free on all
+    its days and rows. Cells outside the month's days stay where they are."""
+    rows, cols = w["rows"], sorted(w["days"])
+    if not rows or not cols:
+        return []
+    items, seen = [], set()
+    for r in rows:
+        for c in range(1, GRID_COLS + 1):
+            if (c, r) in seen:
+                continue
+            mg = sh.merge_at(c, r)
+            if mg:
+                seen.update((cc, rr) for cc in range(mg[0], mg[2] + 1) for rr in range(mg[1], mg[3] + 1))
+                if not _has_text(sh, mg[0], mg[1]):
+                    continue
+                movable = all(cc in cols for cc in range(mg[0], mg[2] + 1)) and all(rr in rows for rr in range(mg[1], mg[3] + 1))
+                items.append({"c0": mg[0], "c1": mg[2], "r": mg[1], "h": mg[3] - mg[1] + 1, "fixed": not movable, "merge": mg})
+            elif _has_text(sh, c, r):
+                seen.add((c, r))
+                items.append({"c0": c, "c1": c, "r": r, "h": 1, "fixed": c not in cols, "merge": None})
+    taken, last, moves = set(), {}, []
+    for it in sorted(items, key=lambda x: (x["r"], x["c0"])):
+        span = range(it["c0"], it["c1"] + 1)
+        dest = it["r"]
+        if not it["fixed"]:
+            for i, r in enumerate(rows):
+                if r > it["r"]:
+                    break
+                block = rows[i:i + it["h"]]
+                if len(block) == it["h"] and block[-1] - block[0] == it["h"] - 1 and all(
+                        (cc, rr) not in taken and r > last.get(cc, 0) for cc in span for rr in block):
+                    dest = r
+                    break
+        for cc in span:
+            for rr in range(dest, dest + it["h"]):
+                taken.add((cc, rr))
+            last[cc] = max(last.get(cc, 0), dest + it["h"] - 1)
+        if dest != it["r"]:
+            moves.append((it, dest))
+    return moves
+
+
+def compact_sheet(sh):
+    """Move events up so no day has an empty cell above one of its events. Returns how many moved."""
+    moves = []
+    for w in sh.weeks:
+        moves += _plan_week(sh, w)
+    if not moves:
+        return 0
+
+    def xml_of(c, r):
+        m = sh._cell_re(ref_of(c, r)).search(sh.xml)
+        return m.group(0) if m else '<c r="%s"/>' % ref_of(c, r)
+
+    blanks = {r: blank_style(sh, r) for it, _ in moves for r in range(it["r"], it["r"] + it["h"])}
+    saved = [(it, dest, {(cc, k): xml_of(cc, it["r"] + k) for cc in range(it["c0"], it["c1"] + 1) for k in range(it["h"])})
+             for it, dest in moves]
+    for it, _, _ in saved:  # empty the old places first
+        if it["merge"]:
+            sh.remove_merge(it["merge"])
+        for cc in range(it["c0"], it["c1"] + 1):
+            for k in range(it["h"]):
+                sh.set_cell(cc, it["r"] + k, "", blanks[it["r"] + k])
+    for it, dest, xmls in saved:
+        for (cc, k), x in xmls.items():
+            ref = ref_of(cc, dest + k)
+            x = re.sub(r'^<c r="[A-Z]+\d+"', '<c r="%s"' % ref, x)
+            rx = sh._cell_re(ref)
+            if rx.search(sh.xml):
+                sh.xml = rx.sub(lambda m: x, sh.xml, count=1)
+            else:
+                sh._insert_cell(cc, dest + k, x)
+        if it["merge"]:
+            ref = "%s:%s" % (ref_of(it["c0"], dest), ref_of(it["c1"], dest + it["h"] - 1))
+            sh.xml = re.sub(r"</mergeCells>", '<mergeCell ref="%s"/></mergeCells>' % ref, sh.xml, count=1)
+            sh._recount()
+    sh.book.changed.add(sh.path)
+    sh.commit()
+    sh.read()
+    return len(moves)
+
 def apply_ops(book, ops):
     """ops: list of dicts with "id" and "kind" (add/edit/delete/move). Returns {op id: result}."""
     sheets, legend = load(book)
@@ -554,6 +643,21 @@ def apply_ops(book, ops):
                 results[op["id"]] = {"ok": True, "refs": place_event(sheets, legend_rev, op)}
             except Exception as e:
                 results[op["id"]] = {"ok": False, "error": "נמחק מהתאריך הישן אבל לא נוסף לחדש: " + str(e)}
+    # A deleted or moved event leaves a gap: move the events below it up (only in the month sheets that changed).
+    if any(o["kind"] in ("delete", "move") and results.get(o["id"], {}).get("ok") for o in order):
+        before = sorted((e["date"], e["end"], e["title"], e.get("time", ""), e.get("color", "")) for e in all_events(sheets, legend))
+        snap = {sh.path: sh.xml for sh in sheets}
+        moved = sum(compact_sheet(sh) for sh in sheets if sh.month and sh.path in book.changed)
+        after = sorted((e["date"], e["end"], e["title"], e.get("time", ""), e.get("color", "")) for e in all_events(sheets, legend))
+        if before != after:  # never let the packing change an event: undo it
+            for sh in sheets:
+                if sh.xml != snap[sh.path]:
+                    sh.xml = snap[sh.path]
+                    sh.commit()
+                    sh.read()
+            print("Packing skipped: it would have changed events")
+        elif moved:
+            print("Packed", moved, "events up")
     return results
 
 
