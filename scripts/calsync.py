@@ -616,6 +616,195 @@ def compact_sheet(sh):
     sh.read()
     return len(moves)
 
+def _fonts_and_xfs(book):
+    """Font size of every cell style, and which styles wrap their text."""
+    xml = book.files["xl/styles.xml"].decode("utf-8")
+    fonts = re.search(r"<fonts\b[^>]*>(.*?)</fonts>", xml, re.S).group(1)
+    sizes = []
+    for f in re.findall(r"<font\b[^>]*/>|<font\b[^>]*>.*?</font>", fonts, re.S):
+        m = re.search(r'<sz val="([\d.]+)"', f)
+        sizes.append(float(m.group(1)) if m else 11.0)
+    xfs = re.findall(r"<xf\b[^>]*/>|<xf\b[^>]*>.*?</xf>", re.search(r"<cellXfs\b[^>]*>(.*?)</cellXfs>", xml, re.S).group(1), re.S)
+    out = []
+    for x in xfs:
+        m = re.search(r'fontId="(\d+)"', x)
+        out.append({"size": sizes[int(m.group(1))] if m and int(m.group(1)) < len(sizes) else 11.0, "wrap": 'wrapText="1"' in x})
+    return out
+
+
+def ensure_wrap(book, styles):
+    """Make these cell styles wrap their text (so a long event goes on to the next line)."""
+    xml = book.files["xl/styles.xml"].decode("utf-8")
+    m = re.search(r"(<cellXfs\b[^>]*>)(.*?)(</cellXfs>)", xml, re.S)
+    items = re.findall(r"<xf\b[^>]*/>|<xf\b[^>]*>.*?</xf>", m.group(2), re.S)
+    changed = False
+    for i in {int(x) for x in styles if x is not None and str(x).isdigit()}:
+        x = items[i]
+        if 'wrapText="1"' in x:
+            continue
+        if "<alignment" in x:
+            x = re.sub(r"<alignment\b", '<alignment wrapText="1"', x, count=1)
+            x = re.sub(r'wrapText="0"', "", x)
+        elif x.endswith("/>"):
+            x = x[:-2] + '><alignment wrapText="1" vertical="center" horizontal="center"/></xf>'
+        else:
+            x = x.replace("</xf>", '<alignment wrapText="1" vertical="center" horizontal="center"/></xf>')
+        if "applyAlignment=" not in x:
+            x = x.replace("<xf ", '<xf applyAlignment="1" ', 1)
+        items[i] = x
+        changed = True
+    if changed:
+        xml = xml[:m.start(2)] + "".join(items) + xml[m.end(2):]
+        book.files["xl/styles.xml"] = xml.encode("utf-8")
+        book._styles()
+
+
+def _col_widths(sh):
+    w = {}
+    for m in re.finditer(r"<col\b([^>]*)/?>", sh.xml):
+        a = m.group(1)
+        lo, hi, wd = re.search(r'min="(\d+)"', a), re.search(r'max="(\d+)"', a), re.search(r'width="([\d.]+)"', a)
+        if lo and hi and wd:
+            for c in range(int(lo.group(1)), int(hi.group(1)) + 1):
+                w[c] = float(wd.group(1))
+    d = re.search(r'defaultColWidth="([\d.]+)"', sh.xml)
+    return w, float(d.group(1)) if d else 12.63
+
+
+def _lines(text, chars):
+    n = 0
+    for para in str(text).split("\n"):
+        words, cur = para.split(), 0
+        if not words:
+            n += 1
+            continue
+        n += 1
+        for wd in words:
+            L = len(wd)
+            if cur and cur + 1 + L > chars:
+                n += 1
+                cur = 0
+            while L > chars:  # a word longer than the line breaks too
+                n += 1
+                L -= chars
+            cur = (cur + 1 + L) if cur else L
+    return n
+
+
+def fit_rows(sh):
+    """Give every event row of the calendar the height its text needs (wrapped), so nothing is cut off.
+    Returns how many rows changed."""
+    info = _fonts_and_xfs(sh.book)
+    widths, dflt = _col_widths(sh)
+    need, styles = {}, []
+    for w in sh.weeks:
+        for r in w["rows"]:
+            for c in range(1, GRID_COLS + 1):
+                if not _has_text(sh, c, r):
+                    continue
+                mg = sh.merge_at(c, r)
+                if mg and (mg[0], mg[1]) != (c, r):
+                    continue
+                c1, r1 = (mg[2], mg[3]) if mg else (c, r)
+                st = sh.cells[(c, r)]["s"]
+                styles.append(st)
+                size = info[int(st)]["size"] if st is not None and str(st).isdigit() and int(st) < len(info) else 11.0
+                width = sum(widths.get(k, dflt) for k in range(c, c1 + 1))
+                chars = max(4, int(width * 11.0 / size * 1.2) - 1)
+                h = _lines(sh.value(c, r), chars) * size * 1.38 + 5
+                rows = list(range(r, r1 + 1))
+                per = h / len(rows)
+                for rr in rows:
+                    need[rr] = max(need.get(rr, 0), per)
+    ensure_wrap(sh.book, styles)
+    changed = 0
+    for w in sh.weeks:
+        for r in w["rows"]:
+            want = max(15.75, round(need.get(r, 0) * 4) / 4)
+            m = re.search(r'<row r="%d"([^>]*?)(/?)>' % r, sh.xml)
+            if not m:
+                continue
+            ht = re.search(r'ht="([\d.]+)"', m.group(1))
+            cur = float(ht.group(1)) if ht else 15.0
+            if abs(cur - want) < 0.5:
+                continue
+            attrs = re.sub(r'\s(ht|customHeight)="[^"]*"', "", m.group(1)) + ' ht="%s" customHeight="1"' % want
+            sh.xml = sh.xml[:m.start()] + '<row r="%d"%s%s>' % (r, attrs, m.group(2)) + sh.xml[m.end():]
+            changed += 1
+    if changed:
+        sh.book.changed.add(sh.path)
+        sh.commit()
+    return changed
+
+
+def box_borders(sh):
+    """Every cell of the calendar grid (the event rows under the dates) gets a thin border on all four sides.
+    Inside a merged cell the inner lines are not drawn, so a whole box is right there too. Returns how many changed."""
+    book = sh.book
+    xml = book.files["xl/styles.xml"].decode("utf-8")
+    bm = re.search(r"(<borders\b[^>]*>)(.*?)(</borders>)", xml, re.S)
+    borders = re.findall(r"<border\b[^>]*/>|<border\b[^>]*>.*?</border>", bm.group(2), re.S)
+    full = None
+    for i, b in enumerate(borders):
+        if all(re.search(r'<%s style="thin"' % side, b) for side in ("left", "right", "top", "bottom")):
+            full = i
+            break
+    if full is None:
+        thin = '<%s style="thin"><color rgb="FF000000"/></%s>'
+        borders.append("<border>%s%s%s%s<diagonal/></border>" % tuple(thin % (x, x) for x in ("left", "right", "top", "bottom")))
+        full = len(borders) - 1
+        xml = xml[:bm.start(2)] + "".join(borders) + xml[bm.end(2):]
+        xml = re.sub(r'<borders count="\d+"', '<borders count="%d"' % len(borders), xml, count=1)
+    xm = re.search(r"(<cellXfs\b[^>]*>)(.*?)(</cellXfs>)", xml, re.S)
+    xfs = re.findall(r"<xf\b[^>]*/>|<xf\b[^>]*>.*?</xf>", xm.group(2), re.S)
+    n0 = len(xfs)
+    boxed = {}
+
+    def boxed_style(st):
+        st = "0" if st is None else str(st)
+        if st in boxed:
+            return boxed[st]
+        x = xfs[int(st)]
+        if re.search(r'borderId="%d"' % full, x):
+            boxed[st] = st
+            return st
+        x = re.sub(r'borderId="\d+"', 'borderId="%d"' % full, x, count=1) if "borderId=" in x else x.replace("<xf ", '<xf borderId="%d" ' % full, 1)
+        x = re.sub(r'applyBorder="\d"', 'applyBorder="1"', x) if "applyBorder=" in x else x.replace("<xf ", '<xf applyBorder="1" ', 1)
+        xfs.append(x)
+        boxed[st] = str(len(xfs) - 1)
+        return boxed[st]
+
+    todo = []
+    for w in sh.weeks:
+        for r in w["rows"]:
+            for c in range(1, GRID_COLS + 1):
+                cell = sh.cells.get((c, r))
+                st = cell["s"] if cell else blank_style(sh, r)
+                new = boxed_style(st)
+                if cell is None or str(cell["s"]) != new:
+                    todo.append((c, r, new, cell is None))
+    if not todo:
+        return 0
+    if len(xfs) != n0:
+        xml = xml[:xm.start(2)] + "".join(xfs) + xml[xm.end(2):]
+        xml = re.sub(r'<cellXfs count="\d+"', '<cellXfs count="%d"' % len(xfs), xml, count=1)
+    book.files["xl/styles.xml"] = xml.encode("utf-8")
+    book._styles()
+    for c, r, new, missing in todo:
+        ref = ref_of(c, r)
+        if missing:
+            sh._insert_cell(c, r, '<c r="%s" s="%s"/>' % (ref, new))
+            continue
+        rx = re.compile(r'(<c r="%s")((?: [^>]*?)?)(/>|>)' % ref)
+        m = rx.search(sh.xml)
+        attrs = re.sub(r' s="\d+"', "", m.group(2))
+        sh.xml = sh.xml[:m.start()] + m.group(1) + ' s="%s"' % new + attrs + m.group(3) + sh.xml[m.end():]
+    book.changed.add(sh.path)
+    sh.commit()
+    sh.read()
+    return len(todo)
+
+
 def apply_ops(book, ops):
     """ops: list of dicts with "id" and "kind" (add/edit/delete/move). Returns {op id: result}."""
     sheets, legend = load(book)
@@ -660,6 +849,11 @@ def apply_ops(book, ops):
             print("Packing skipped: it would have changed events")
         elif moved:
             print("Packed", moved, "events up")
+    # Rows fit their text (an event may have moved into a row that was too short for it).
+    for sh in sheets:
+        if sh.month and sh.path in book.changed:
+            fit_rows(sh)
+            box_borders(sh)
     return results
 
 
