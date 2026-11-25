@@ -13,6 +13,9 @@
   var me = { id: "", name: "", fullName: "", role: "", unit: "", admin: false };
   function isBoger() { return BOGER.indexOf(me.role) !== -1; }
   function isLead() { return me.role === "מרכז צעיר" || isBoger(); }      /* צוות הובלה */
+  /* Among בוגרים only מרכז בוגר approves equipment; the other בוגר roles see every request but don't approve. */
+  function approverRole(r) { return BOGER.indexOf(r) === -1 || r === "מרכז בוגר"; }
+  F.approverRole = approverRole;
   var can = F.can = {
     editCal: function () { return me.admin || isLead(); },
     seeAllGear: function () { return me.admin || isLead(); },
@@ -234,22 +237,28 @@
   Org.name = function (id) { var x = Org.map[id]; return x ? x.n : (id || "").replace(/@.*/, ""); };
   Org.seniors = function () { return Object.keys(Org.map).filter(function (k) { return Org.map[k].r === "מרכז בוגר"; }); };
   /* Who may approve someone's equipment: their direct manager and that person's manager; מרכז בוגר for מדריכי שכבה. */
+  function canAppr(id) { return !!Org.map[id] && approverRole(Org.map[id].r); }
   Org.approvers = function (uid) {
     var x = Org.map[uid] || { r: me.role, m: "" };
     if (x.r === "מדריך שכבה") return Org.seniors();
     var out = [], m1 = x.m, m2 = m1 && Org.map[m1] ? Org.map[m1].m : "";
     /* A direct manager who isn't registered yet: their own manager approves. */
     if (!m1 && x.mn && Org.virtual[x.mn]) return [Org.virtual[x.mn]];
-    if (m1 && Org.map[m1]) out.push(m1);
-    if (m2 && Org.map[m2] && out.indexOf(m2) === -1) out.push(m2);
+    if (m1 && canAppr(m1)) out.push(m1);
+    if (m2 && canAppr(m2) && out.indexOf(m2) === -1) out.push(m2);
+    /* Managers who may not approve (בוגר roles other than מרכז בוגר) are skipped: go further up the tree. */
+    var k = m2 && Org.map[m2] ? Org.map[m2].m : "", guard = 0;
+    while (!out.length && k && Org.map[k] && guard++ < 10) { if (canAppr(k) && k !== uid) out.push(k); k = Org.map[k].m; }
+    if (!out.length && BOGER.indexOf(x.r) !== -1) out = Org.seniors().filter(function (s) { return s !== uid; });
     return out;
   };
-  /* Only the direct manager gets the notification. */
+  /* Only the direct manager gets the notification (or, if they may not approve, whoever approves instead). */
   Org.notifyTo = function (uid) {
     var x = Org.map[uid] || { r: me.role, m: "" };
     if (x.r === "מדריך שכבה") return Org.seniors();
     if (!x.m && x.mn && Org.virtual[x.mn]) return [Org.virtual[x.mn]];
-    return x.m && Org.map[x.m] ? [x.m] : [];
+    if (x.m && canAppr(x.m)) return [x.m];
+    return Org.approvers(uid).slice(0, 1);
   };
 
   /* ---------- gadud / team list (kept by managers in the settings) ---------- */
@@ -1628,7 +1637,7 @@
     if (F.area === "gear" && Gear.built) { Gear.render(); Gear.markSeen(); }
     if (F.area === "home") Home.render();
   };
-  Gear.canApprove = function (g) { return me.admin || (g.approvers || []).indexOf(me.id) !== -1; };
+  Gear.canApprove = function (g) { return me.admin || (F.approverRole(me.role) && (g.approvers || []).indexOf(me.id) !== -1); };
   Gear.answered = function () { return Gear.list.filter(function (g) { return g.uid === me.id && g.ownerSeen === false && g.status !== "pending" && !g.dismissed; }); };
   Gear.attention = function () {
     var appr = Gear.list.filter(function (g) { return g.status === "pending" && Gear.canApprove(g) && g.uid !== me.id; }).length;
