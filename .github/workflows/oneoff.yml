@@ -12,6 +12,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r scripts/requirements.txt
-      - run: python -u scripts/rename_category.py
+      - run: python -u scripts/compact_schedule.py
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
