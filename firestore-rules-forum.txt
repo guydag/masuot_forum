@@ -9,6 +9,7 @@ function fmAdmin() { return exists(/databases/$(database)/documents/admins/$(fmE
 function fmYoung() { return fmRole() == "מרכז צעיר"; }
 function fmBoger() { return fmRole() in ["מרכז בוגר", "דרג מתנדב", "מלווה ט׳", "מדריך שכבה"]; }
 function fmEditor() { return fmAdmin() || fmYoung() || fmBoger(); }
+function fmGearApprover() { return fmAdmin() || !(fmRole() in ["דרג מתנדב", "מלווה ט׳", "מדריך שכבה"]); }
 
 // Calendar: written only by the sync job; changes from the site go through cal_ops.
 match /cal/{doc} {
@@ -29,12 +30,17 @@ match /bookings/{id} {
 }
 // Equipment requests
 match /gear/{id} {
-  allow read: if request.auth != null && (resource.data.uid == fmEmail() || fmEditor());
-  allow create: if request.auth != null && request.resource.data.uid == fmEmail() && request.resource.data.status == "pending";
+  allow read: if request.auth != null && (resource.data.uid == fmEmail() || fmEditor() || fmEmail() in resource.data.get("approvers", [])
+    || (resource.data.get("unit", "") != "" && resource.data.get("unit", "") == fmUnit()));
+  allow create: if request.auth != null && request.resource.data.uid == fmEmail() && request.resource.data.status == "pending"
+    && !(fmEmail() in request.resource.data.get("approvers", []));
+  // Status changes: managers, מרכז צעיר, מרכז בוגר and approvers outside the בוגר roles. Other בוגרים only tick the shopping list.
   allow update: if request.auth != null && (
-    (resource.data.uid == fmEmail() && request.resource.data.uid == fmEmail() && request.resource.data.status == "pending")
-    || fmAdmin() || fmYoung());
-  allow delete: if request.auth != null && ((resource.data.uid == fmEmail() && resource.data.status != "approved") || fmAdmin() || fmYoung());
+    ((fmEditor() || fmEmail() in resource.data.get("approvers", []))
+      && (fmGearApprover() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(["items"])))
+    || (resource.data.uid == fmEmail() && request.resource.data.uid == fmEmail()
+        && (request.resource.data.status == "pending" || request.resource.data.diff(resource.data).affectedKeys().hasOnly(["dismissed", "ownerSeen"]))));
+  allow delete: if request.auth != null && (resource.data.uid == fmEmail() || fmAdmin());
 }
 // Useful links: everyone reads, managers write.
 match /links/{id} {
