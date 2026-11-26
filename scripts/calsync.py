@@ -705,9 +705,23 @@ def _lines(text, chars):
     return n
 
 
-def fit_rows(sh):
+def row_sigs(sh):
+    """What each calendar row holds (text and merged width per column), to tell which rows a change touched."""
+    out = {}
+    for w in sh.weeks:
+        for r in w["rows"]:
+            sig = []
+            for c in range(1, GRID_COLS + 1):
+                if _has_text(sh, c, r):
+                    mg = sh.merge_at(c, r)
+                    sig.append((c, str(sh.value(c, r)), (mg[2] - mg[0], mg[3] - mg[1]) if mg else (0, 0)))
+            out[r] = tuple(sig)
+    return out
+
+
+def fit_rows(sh, only=None):
     """Give every event row of the calendar the height its text needs (wrapped), so nothing is cut off.
-    Returns how many rows changed."""
+    With `only`, just those rows (the rest keep the height Google Sheets fitted them to). Returns how many rows changed."""
     info = _fonts_and_xfs(sh.book)
     widths, dflt = _col_widths(sh)
     need, styles = {}, []
@@ -734,6 +748,8 @@ def fit_rows(sh):
     changed = 0
     for w in sh.weeks:
         for r in w["rows"]:
+            if only is not None and r not in only:
+                continue
             want = max(15.75, round(need.get(r, 0) * 4) / 4)
             m = re.search(r'<row r="%d"([^>]*?)(/?)>' % r, sh.xml)
             if not m:
@@ -824,6 +840,7 @@ def apply_ops(book, ops):
     sheets, legend = load(book)
     legend_rev = {v: k for k, v in legend.items()}
     results = {}
+    sigs_before = {sh.path: Counter(row_sigs(sh).values()) for sh in sheets if sh.month}
     # Edits and deletes first: they point at cells by address, and adding can push rows down.
     order = sorted(ops, key=lambda o: (0 if o["kind"] in ("edit", "delete", "move") else 1, o.get("at", 0)))
     for op in order:
@@ -866,7 +883,9 @@ def apply_ops(book, ops):
     # Rows fit their text (an event may have moved into a row that was too short for it).
     for sh in sheets:
         if sh.month and sh.path in book.changed:
-            fit_rows(sh)
+            # Only rows whose content is new get a new height; untouched rows keep Google Sheets' exact fit.
+            had = sigs_before.get(sh.path, Counter())
+            fit_rows(sh, {r for r, sig in row_sigs(sh).items() if sig and had[sig] == 0})
             box_borders(sh)
             center_cells(sh)
     return results
