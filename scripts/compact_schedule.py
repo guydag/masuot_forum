@@ -23,9 +23,10 @@ def run(book):
         n = C.compact_sheet(sh)
         f = C.fit_rows(sh)
         bx = C.box_borders(sh)
-        if n or f or bx:
-            print(sh.name, "moved up:", n, "· rows resized:", f, "· borders fixed:", bx)
-        total += n + f + bx
+        ce = C.center_cells(sh)
+        if n or f or bx or ce:
+            print(sh.name, "moved up:", n, "· rows resized:", f, "· borders fixed:", bx, "· styles centred:", ce)
+        total += n + f + bx + ce
     sheets2, legend2 = C.load(book)
     after = sorted((e["date"], e["end"], e["title"], e.get("time", ""), e.get("timeEnd", ""), e.get("color", "")) for e in C.all_events(sheets2, legend2))
     if before != after:
