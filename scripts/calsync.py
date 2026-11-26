@@ -854,7 +854,55 @@ def apply_ops(book, ops):
         if sh.month and sh.path in book.changed:
             fit_rows(sh)
             box_borders(sh)
+            center_cells(sh)
     return results
+
+
+def _centered(x):
+    """This cell style, centred both ways (its wrap and everything else kept)."""
+    m = re.search(r"<alignment\b[^>]*?/?>", x)
+    if m:
+        a = m.group(0)
+        b = re.sub(r'\s(horizontal|vertical)="[^"]*"', "", a)
+        b = re.sub(r"<alignment\b", '<alignment horizontal="center" vertical="center"', b, count=1)
+        x = x[:m.start()] + b + x[m.end():]
+    elif x.endswith("/>"):
+        x = x[:-2] + '><alignment horizontal="center" vertical="center"/></xf>'
+    else:
+        x = x.replace("</xf>", '<alignment horizontal="center" vertical="center"/></xf>')
+    if "applyAlignment=" in x:
+        x = re.sub(r'applyAlignment="\d"', 'applyAlignment="1"', x)
+    else:
+        x = x.replace("<xf ", '<xf applyAlignment="1" ', 1)
+    return x
+
+
+def center_cells(sh):
+    """Every cell of the calendar (the date rows and the event rows under them) is centred across and down.
+    Returns how many cell styles changed."""
+    book = sh.book
+    styles = set()
+    for w in sh.weeks:
+        for r in [w["row"]] + list(w["rows"]):
+            for c in range(1, GRID_COLS + 1):
+                cell = sh.cells.get((c, r))
+                st = cell["s"] if cell else blank_style(sh, r)
+                styles.add("0" if st is None else str(st))
+    xml = book.files["xl/styles.xml"].decode("utf-8")
+    m = re.search(r"(<cellXfs\b[^>]*>)(.*?)(</cellXfs>)", xml, re.S)
+    items = re.findall(r"<xf\b[^>]*/>|<xf\b[^>]*>.*?</xf>", m.group(2), re.S)
+    changed = 0
+    for i in sorted(int(s) for s in styles if s.isdigit() and int(s) < len(items)):
+        x = items[i]
+        if re.search(r'<alignment\b[^>]*horizontal="center"', x) and re.search(r'<alignment\b[^>]*vertical="center"', x) and 'applyAlignment="0"' not in x:
+            continue
+        items[i] = _centered(x)
+        changed += 1
+    if changed:
+        xml = xml[:m.start(2)] + "".join(items) + xml[m.end(2):]
+        book.files["xl/styles.xml"] = xml.encode("utf-8")
+        book._styles()
+    return changed
 
 
 # ---------- Drive + Firestore (GitHub Actions only) ----------
