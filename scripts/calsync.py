@@ -9,6 +9,7 @@ Runs on GitHub Actions every few minutes:
 
 Local test:  python3 scripts/calsync.py --file luz.xlsx [--ops ops.json] [--out new.xlsx] [--dump events.json]
 """
+import html
 import io
 import json
 from collections import Counter
@@ -671,23 +672,36 @@ def _col_widths(sh):
     return w, float(d.group(1)) if d else 12.63
 
 
+_NARROW = set("יו׳״'.,:;!|ן ")
+_WIDE = set("שמםטסצץעWMwm")
+
+
+def _w(ch):
+    """Rough width of one character, in "average letter" units (Hebrew letters vary: י is half, ש is wide)."""
+    if ch == " " or ch in _NARROW:
+        return 0.5
+    if ch in _WIDE:
+        return 1.15
+    if ch.isdigit():
+        return 0.9
+    return 1.0
+
+
 def _lines(text, chars):
+    """How many lines this text takes in a cell `chars` average letters wide (words wrap as a whole)."""
     n = 0
     for para in str(text).split("\n"):
-        words, cur = para.split(), 0
-        if not words:
-            n += 1
-            continue
+        words, cur = para.split(), 0.0
         n += 1
         for wd in words:
-            L = len(wd)
-            if cur and cur + 1 + L > chars:
+            L = sum(_w(ch) for ch in wd)
+            if cur and cur + 0.5 + L > chars:
                 n += 1
-                cur = 0
+                cur = 0.0
             while L > chars:  # a word longer than the line breaks too
                 n += 1
                 L -= chars
-            cur = (cur + 1 + L) if cur else L
+            cur = (cur + 0.5 + L) if cur else L
     return n
 
 
@@ -710,8 +724,8 @@ def fit_rows(sh):
                 styles.append(st)
                 size = info[int(st)]["size"] if st is not None and str(st).isdigit() and int(st) < len(info) else 11.0
                 width = sum(widths.get(k, dflt) for k in range(c, c1 + 1))
-                chars = max(4, int(width * 11.0 / size * 1.2) - 1)
-                h = _lines(sh.value(c, r), chars) * size * 1.38 + 5
+                chars = max(4.0, width * 11.0 / size * 0.98)  # just what fits, measured against Google Sheets
+                h = _lines(sh.value(c, r), chars) * size * 1.28 + 5
                 rows = list(range(r, r1 + 1))
                 per = h / len(rows)
                 for rr in rows:
@@ -902,6 +916,59 @@ def center_cells(sh):
         xml = xml[:m.start(2)] + "".join(items) + xml[m.end(2):]
         book.files["xl/styles.xml"] = xml.encode("utf-8")
         book._styles()
+    return changed
+
+
+PAST_TAB = "FFFF5050"
+
+
+def arrange_months(book, today):
+    """Months that are over go to the end of the sheet tabs, in order, with a red tab (as was done by hand);
+    the coming months stay first, in order. Returns True if anything changed."""
+    wb = book.files["xl/workbook.xml"].decode("utf-8")
+    m = re.search(r"(<sheets>)(.*?)(</sheets>)", wb, re.S)
+    tags = re.findall(r"<sheet\b[^>]*/>", m.group(2))
+    key = {}
+    for info in book.sheets:
+        sh = Sheet(book, info)
+        if sh.month and sh.year:
+            key[info["name"]] = (sh.year, sh.month)
+    now = (today.year, today.month)
+
+    def name_of(t):
+        return html.unescape(re.search(r'name="([^"]*)"', t).group(1))
+    coming = sorted((t for t in tags if name_of(t) in key and key[name_of(t)] >= now), key=lambda t: key[name_of(t)])
+    past = sorted((t for t in tags if name_of(t) in key and key[name_of(t)] < now), key=lambda t: key[name_of(t)])
+    other = [t for t in tags if name_of(t) not in key]
+    changed = False
+    new = coming + past + other
+    if new != tags:
+        wb = wb[:m.start(2)] + "".join(new) + wb[m.end(2):]
+        book.files["xl/workbook.xml"] = wb.encode("utf-8")
+        book.changed.add("xl/workbook.xml")
+        book._sheets()
+        changed = True
+    past_names = {name_of(t) for t in past}
+    for info in book.sheets:
+        if info["name"] not in key:
+            continue
+        xml = book.files[info["path"]].decode("utf-8")
+        red = re.search(r'<tabColor rgb="%s"\s*/>' % PAST_TAB, xml)
+        if info["name"] in past_names and not red:
+            xml = re.sub(r"<tabColor\b[^>]*/>", "", xml, count=1)
+            if re.search(r"<sheetPr\b[^>]*/>", xml):
+                xml = re.sub(r"<sheetPr\b([^>]*)/>", r'<sheetPr\1><tabColor rgb="%s"/></sheetPr>' % PAST_TAB, xml, count=1)
+            elif "<sheetPr" in xml:
+                xml = re.sub(r"(<sheetPr\b[^>]*>)", r'\1<tabColor rgb="%s"/>' % PAST_TAB, xml, count=1)
+            else:
+                xml = re.sub(r"(<worksheet\b[^>]*>)", r'\1<sheetPr><tabColor rgb="%s"/></sheetPr>' % PAST_TAB, xml, count=1)
+        elif info["name"] not in past_names and red:
+            xml = xml[:red.start()] + xml[red.end():]
+        else:
+            continue
+        book.files[info["path"]] = xml.encode("utf-8")
+        book.changed.add(info["path"])
+        changed = True
     return changed
 
 
@@ -1204,6 +1271,28 @@ class Sync:
                 db.collection("cal_ops").document(o["id"]).set(
                     {"state": "done" if r.get("ok") else "failed", "error": r.get("error", ""), "doneAt": fs.SERVER_TIMESTAMP}, merge=True)
             print(time.strftime("%H:%M:%S"), "Applied", len(ops), "changes:", results)
+        # Once a month is over its sheet moves to the end with a red tab (checked once a month per run).
+        from zoneinfo import ZoneInfo
+        today = dt.datetime.now(ZoneInfo("Asia/Jerusalem")).date()
+        if getattr(self, "arranged", None) != (today.year, today.month):
+            try:
+                book.changed = set()
+                if arrange_months(book, today):
+                    now = drive_meta(s)
+                    if now.get("headRevisionId") == meta.get("headRevisionId") and now.get("modifiedTime") == meta.get("modifiedTime"):
+                        new_bytes = book.save()
+                        drive_upload(s, new_bytes)
+                        book = self.book = Book(new_bytes)
+                        meta = drive_meta(s)
+                        print("Past months moved to the end")
+                        self.arranged = (today.year, today.month)
+                    else:
+                        self.book = None
+                else:
+                    self.arranged = (today.year, today.month)
+            except Exception as e:
+                print("Arranging the months failed:", e)
+                self.book = None
         n = self.store(book, meta.get("modifiedTime"))
         self.status.set({"ok": True, "error": "", "count": n, "at": fs.SERVER_TIMESTAMP})
         self.last_modified = meta.get("modifiedTime")
